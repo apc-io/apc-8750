@@ -1,0 +1,24 @@
+config WMT_VT1603A_TOUCHSCREEN
+        tristate "WonderMedia VT1603 Touchscreen Device Support"
+        default m
+        depends on ARCH_WMT
+        ---help---
+          Say Y here if you have an WMT based board with touchscreen
+          attached to it.
+          If unsure, say N.
+          To compile this driver as a module, choose M here: the
+          module will be called vt1603_ts.
+
+choice
+    prompt "VT1603 TouchPanel interface Select"
+    depends on WMT_VT1603A_TOUCHSCREEN
+    default VT1603_TS_I2C
+config VT1603_TS_SPI
+        bool "SPI"
+        ---help---
+          Say Y here if you want to use SPI bus.
+config VT1603_TS_I2C
+        bool "I2C"
+        ---help---
+          Say Y here if you want to use I2C bus.
+endchoice

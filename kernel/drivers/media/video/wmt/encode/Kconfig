@@ -1,0 +1,9 @@
+#
+# Multimedia Video device configuration
+#
+
+#config WMT_VIDEO_ENCODE
+#	tristate "WonderMedia Video H264ENC"
+#	---help---
+#	  Say Y here to enable Video H264ENC.
+

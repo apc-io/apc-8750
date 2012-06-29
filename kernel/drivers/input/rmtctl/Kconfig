@@ -1,0 +1,25 @@
+#
+# Input core configuration
+#
+config INPUT_RMTCTL
+	bool "Remote controllers" if EMBEDDED || !X86
+	default y
+	depends on INPUT
+	help
+	  Say Y here, and a list of supported remote control devices will 
+	  be displayed. This option doesn't affect the kernel.
+
+	  If unsure, say Y.
+
+config RMTCTL_WonderMedia
+	tristate "WonderMedia remote control support" if !PC
+	default y
+	depends on INPUT && INPUT_RMTCTL
+	help
+	  Say Y here if you want remote control support for WonderMedia.
+
+	  If unsure, say Y.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called atkbd.
+

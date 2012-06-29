@@ -1,0 +1,63 @@
+#
+# CRYPTO CONFIGURATION
+#
+
+menu "Hardware crypto devices"
+
+config CRYPTO_DEV_WMT
+	tristate "Support for WMT Cipher"
+#	depends on CRYPTO
+	default m
+	help
+	  If you say yes here you get support for the WMT chip.
+	  
+	  This driver can also be built as a module.  If so, the module
+	  will be called wm-cipher.
+	  
+if CRYPTO_DEV_WMT
+
+config CRYPTO_DEV_WMT_AES
+	tristate "AES (ECB, CBC, CTR, OFB) cipher algorithms"
+	depends on CRYPTO_DEV_WMT
+	default m
+	help
+	  For AES algorithm.
+	  
+#config CRYPTO_DEV_WMT_DES
+#	tristate "DES (ECB, CBC, CTR, OFB) cipher algorithms"
+#	depends on CRYPTO_DEV_WMT
+#	default m
+#	help
+#	  For DES algorithm.
+#	  
+#config CRYPTO_DEV_WMT_TDES
+#	tristate "TDES cipher algorithms"
+#	depends on CRYPTO_DEV_WMT
+#	default m
+#	help
+#	  For TDES algorithm.
+#	  
+#config CRYPTO_DEV_WMT_RC4
+#	tristate "RC4 cipher algorithm"
+#	depends on CRYPTO_DEV_WMT
+#	default m
+#	help
+#	  RC4 cipher algorithm.	  
+
+config CRYPTO_DEV_WMT_SHA1
+	tristate "SHA1 cipher algorithms"
+	depends on CRYPTO_DEV_WMT
+	default m
+	help
+	  For SHA1 algorithm.
+
+config CRYPTO_DEV_WMT_SHA256
+	tristate "SHA256 cipher algorithms"
+	depends on CRYPTO_DEV_WMT
+	default m
+	help
+	  For SHA256 algorithm.
+
+endif	# if CRYPTO_DEV_WMT
+
+endmenu
