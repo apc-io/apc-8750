@@ -509,6 +509,7 @@ void vpp_device_init(void)
 	lcd_HSD101PFW2_init();
 	
 	vt1632_module_init();
+	sil902x_module_init();
 }
 
 int wmt_graphic_init(void)
