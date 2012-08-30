@@ -52,7 +52,7 @@ COBJS	= main.o ACEX1K.o altera.o bedbug.o circbuf.o \
   	  wmt_display/devices/lcd-oem.o wmt_display/devices/lcd-AUO-A080SN01.o wmt_display/devices/lcd-INNOLUX-AT070TN83.o\
 	  wmt_display/devices/lcd-CHILIN-LW700at9003.o wmt_display/devices/lcd-EKING-EK08009-70135.o \
 	  wmt_display/devices/lcd-HANNSTAR-HSD101PFW2.o \
-	  wmt_display/devices/vt1632.o \
+	  wmt_display/devices/vt1632.o wmt_display/devices/sil902x.o\
 	  wmt_display/wmt_cmd_display.o  wmt_display/minivgui.o wmt_display/uboot-vpp.o \
   	  wmt_display/cmd_mbit.o wmt_display/cmd_textout.o wmt_display/env_parse.o\
 	  flash.o fpga.o ft_build.o \
