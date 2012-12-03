@@ -1,1 +1,0 @@
-#define	WMT_U_BOOT_VERSION	"0.28.00.00" 

@@ -1,1 +1,0 @@
-#define	CONFIG_KERNEL_VERSION	"1.01.00.00"
