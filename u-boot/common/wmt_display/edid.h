@@ -116,12 +116,13 @@ typedef struct {
 #define EDID_OPT_UNDERSCAN	0x80
 #define EDID_OPT_HDMI		0x100
 #define EDID_OPT_3D			BIT(9)
+#define EDID_OPT_16_9		BIT(10)
 
 typedef struct {
 	unsigned int establish_timing;
 	edid_timing_t standard_timing[8];
-	edid_timing_t detail_timing[4];
-	edid_timing_t cea_timing[6];
+	vpp_timing_t detail_timing[4];
+	vpp_timing_t cea_timing[6];
 	char cea_vic[8];
 	unsigned int pixel_clock_limit;
 	unsigned int option;
@@ -129,8 +130,9 @@ typedef struct {
 } edid_info_t;
 
 extern edid_info_t edid_info;
+extern int edid_msg_enable;
 extern int edid_parse( unsigned char * edid );
-extern int edid_find_support(unsigned int resx,unsigned int resy,int freq);
+extern int edid_find_support(unsigned int resx,unsigned int resy,int freq,vpp_timing_t **timing);
 extern void edid_dump(unsigned char *edid);
 extern int edid_parse_option(unsigned char *edid);
 extern int edid_checksum(unsigned char *edid,int len);

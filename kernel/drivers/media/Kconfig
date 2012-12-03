@@ -142,34 +142,6 @@ config USB_DABUSB
 	  module will be called dabusb.
 endif # DAB
 
-config WMT_VIDEO_DECODE
-	tristate "WonderMedia Video Decoder"
-	---help---
-	  Say Y here to use WonderMedia hardware decoder to decode video
-
-menu "WonderMedia Video Decoder"
-	depends on WMT_VIDEO_DECODE
-source "drivers/media/video/wmt/mpeg2/Kconfig"
-source "drivers/media/video/wmt/mpeg4/Kconfig"
-source "drivers/media/video/wmt/divx/Kconfig"
-source "drivers/media/video/wmt/h263/Kconfig"
-source "drivers/media/video/wmt/h264/Kconfig"
-source "drivers/media/video/wmt/rv/Kconfig"
-source "drivers/media/video/wmt/vc1/Kconfig"
-source "drivers/media/video/wmt/jpeg/Kconfig"
-source "drivers/media/video/wmt/Kconfig"
-endmenu
-
-config WMT_VIDEO_ENCODE
-	tristate "WonderMedia Video Encoder"
-	---help---
-	  Say Y here to use WonderMedia hardware decoder to decode video
-
-menu "WonderMedia HW Video Encoder"
-	depends on WMT_VIDEO_ENCODE
-source "drivers/media/video/wmt/encode/h264/Kconfig"
-endmenu
-
 config WMT_V4L2
 	tristate "WonderMedia V4L2"
 	---help---
@@ -181,6 +153,5 @@ source "drivers/media/video/wmt_v4l2/cmos/Kconfig"
 source "drivers/media/video/wmt_v4l2/tv_decoder/Kconfig"
 
 endmenu
-
 
 endif # MEDIA_SUPPORT

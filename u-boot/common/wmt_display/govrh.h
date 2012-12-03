@@ -45,6 +45,7 @@ typedef struct {
 } govrh_mod_t;
 
 #ifdef WMT_FTBLK_GOVRH_CURSOR
+#define GOVRH_CURSOR_HIDE_TIME	15
 typedef struct {
 	VPP_MOD_BASE;
 
@@ -56,6 +57,8 @@ typedef struct {
 	vdo_color_fmt colfmt;
 	unsigned int cursor_addr1;
 	unsigned int cursor_addr2;
+	int enable;
+	int hide_cnt;
 } govrh_cursor_mod_t;
 #endif
 
@@ -111,6 +114,7 @@ EXTERN vpp_int_err_t govrh_get_int_status(void);
 EXTERN void govrh_clean_int_status(vpp_int_err_t int_sts);
 EXTERN unsigned int govrh_set_clock(unsigned int pixel_clock);
 EXTERN void govrh_set_timing(vpp_timing_t *timing);
+EXTERN void govrh_get_tg(vpp_clock_t * tmr);
 
 #ifdef WMT_FTBLK_GOVRH_IGS
 EXTERN void govrh_IGS_set_mode(int no,int mode_18bit,int msb);

@@ -27,6 +27,7 @@
 #define _USB_H_
 #define LITTLEENDIAN		1	/* used by usb_uhci.c		*/
 #include <usb_defs.h>
+#include <usbdescriptors.h>
 
 /* Everything is aribtrary */
 #define USB_ALTSETTINGALLOC		4
@@ -41,12 +42,6 @@
 //Charles
 //#define USB_CNTL_TIMEOUT 100 /* 100ms timeout */
 #define USB_CNTL_TIMEOUT 0 /* 1ms x 5  timeout */
-/* String descriptor */
-struct usb_string_descriptor {
-	unsigned char  bLength;
-	unsigned char  bDescriptorType;
-	unsigned short wData[1];
-} __attribute__ ((packed));
 
 /* device request (setup) */
 struct devrequest {
@@ -64,70 +59,25 @@ struct usb_descriptor_header {
 	unsigned char  bDescriptorType;
 } __attribute__ ((packed));
 
-/* Device descriptor */
-struct usb_device_descriptor {
-	unsigned char  bLength;
-	unsigned char  bDescriptorType;
-	unsigned short bcdUSB;
-	unsigned char  bDeviceClass;
-	unsigned char  bDeviceSubClass;
-	unsigned char  bDeviceProtocol;
-	unsigned char  bMaxPacketSize0;
-	unsigned short idVendor;
-	unsigned short idProduct;
-	unsigned short bcdDevice;
-	unsigned char  iManufacturer;
-	unsigned char  iProduct;
-	unsigned char  iSerialNumber;
-	unsigned char  bNumConfigurations;
-} __attribute__ ((packed));
+/* Interface */
+struct usb_interface {
+	struct usb_interface_descriptor desc;
 
-
-/* Endpoint descriptor */
-struct usb_endpoint_descriptor {
-	unsigned char  bLength;
-	unsigned char  bDescriptorType;
-	unsigned char  bEndpointAddress;
-	unsigned char  bmAttributes;
-	unsigned short wMaxPacketSize;
-	unsigned char  bInterval;
-	unsigned char  bRefresh;
-	unsigned char  bSynchAddress;
-
-} __attribute__ ((packed));
-/* Interface descriptor */
-struct usb_interface_descriptor {
-	unsigned char  bLength;
-	unsigned char  bDescriptorType;
-	unsigned char  bInterfaceNumber;
-	unsigned char  bAlternateSetting;
-	unsigned char  bNumEndpoints;
-	unsigned char  bInterfaceClass;
-	unsigned char  bInterfaceSubClass;
-	unsigned char  bInterfaceProtocol;
-	unsigned char  iInterface;
-
-	unsigned char  no_of_ep;
+	unsigned char	no_of_ep;
 	unsigned char	num_altsetting;
-	unsigned char  act_altsetting;
+	unsigned char	act_altsetting;
+
 	struct usb_endpoint_descriptor ep_desc[USB_MAXENDPOINTS];
 } __attribute__ ((packed));
 
+/* Configuration information.. */
+struct usb_config {
+	struct usb_configuration_descriptor desc;
 
-/* Configuration descriptor information.. */
-struct usb_config_descriptor {
-	unsigned char  bLength;
-	unsigned char  bDescriptorType;
-	unsigned short wTotalLength;
-	unsigned char  bNumInterfaces;
-	unsigned char  bConfigurationValue;
-	unsigned char  iConfiguration;
-	unsigned char  bmAttributes;
-	unsigned char  MaxPower;
-
-	unsigned char  no_of_if;		/* number of interfaces */
-	struct usb_interface_descriptor if_desc[USB_MAXINTERFACES];
+	unsigned char	no_of_if;	/* number of interfaces */
+	struct usb_interface if_desc[USB_MAXINTERFACES];
 } __attribute__ ((packed));
+
 
 enum {
 	/* Maximum packet size; encoded as 0,1,2,3 = 8,16,32,64 */
@@ -154,8 +104,7 @@ struct usb_device {
 
 	int configno;			/* selected config number */
 	struct usb_device_descriptor descriptor; /* Device Descriptor */
-	struct usb_config_descriptor config; /* config descriptor */
-
+	struct usb_config config; /* config descriptor */
 	int have_langid;		/* whether string_langid is valid yet */
 	int string_langid;		/* language ID for strings */
 	int (*irq_handle)(struct usb_device *dev);
@@ -172,7 +121,7 @@ struct usb_device {
 	int portnr;
 	struct usb_device *parent;
 	struct usb_device *children[USB_MAXCHILDREN];
-};
+} __attribute__ ((packed)) ;
 
 /**********************************************************************
  * this is how the lowlevel part communicate with the outer world
@@ -217,6 +166,12 @@ int usb_stor_scan(int mode);
 void usb_stor_info(void);
 #endif
 
+
+#define USB_MAX_ETH_DEV 5
+#ifdef CONFIG_USB_HOST_ETHER
+int usb_host_eth_scan(int mode);
+#endif
+
 #ifdef CONFIG_USB_KEYBOARD
 
 int drv_usb_kbd_init(void);
@@ -239,7 +194,7 @@ int usb_bulk_msg(struct usb_device *dev, unsigned int pipe,
 			void *data, int len, int *actual_length, int timeout);
 int usb_submit_int_msg(struct usb_device *dev, unsigned long pipe,
 			void *buffer,int transfer_len, int interval);
-void usb_disable_asynch(int disable);
+int usb_disable_asynch(int disable);
 int usb_maxpacket(struct usb_device *dev,unsigned long pipe);
 void __inline__ wait_ms(unsigned long ms);
 int usb_get_configuration_no(struct usb_device *dev,unsigned char *buffer,int cfgno);

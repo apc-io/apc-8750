@@ -1043,7 +1043,7 @@ retry_it:
 /* Probe to see if a new device is actually a Storage device */
 int usb_storage_probe(struct usb_device *dev, unsigned int ifnum,struct us_data *ss)
 {
-	struct usb_interface_descriptor *iface;
+	struct usb_interface *iface;
 	int i;
 	unsigned int flags = 0;
 
@@ -1068,11 +1068,11 @@ int usb_storage_probe(struct usb_device *dev, unsigned int ifnum,struct us_data 
 		subclass = US_SC_SCSI;	    /* an assumption */
 		
 	if (dev->descriptor.bDeviceClass != 0 ||
-			iface->bInterfaceClass != USB_CLASS_MASS_STORAGE ||
-			iface->bInterfaceSubClass < US_SC_MIN ||
-			iface->bInterfaceSubClass > US_SC_MAX) {
+			iface->desc.bInterfaceClass != USB_CLASS_MASS_STORAGE ||
+			iface->desc.bInterfaceSubClass < US_SC_MIN ||
+			iface->desc.bInterfaceSubClass > US_SC_MAX) {
 		/* if it's not a mass storage, we go no further */
-		return 0;  
+		return 0;
 	}
 
 	memset(ss, 0, sizeof(struct us_data));
@@ -1093,8 +1093,8 @@ int usb_storage_probe(struct usb_device *dev, unsigned int ifnum,struct us_data 
 		ss->subclass = subclass;
 		ss->protocol = protocol;
 	} else {
-		ss->subclass = iface->bInterfaceSubClass;
-		ss->protocol = iface->bInterfaceProtocol;
+		ss->subclass = iface->desc.bInterfaceSubClass;
+		ss->protocol = iface->desc.bInterfaceProtocol;
 	}
 
 	/* set the handler pointers based on the protocol */
@@ -1127,28 +1127,27 @@ int usb_storage_probe(struct usb_device *dev, unsigned int ifnum,struct us_data 
 	 * An optional interrupt is OK (necessary for CBI protocol).
 	 * We will ignore any others.
 	 */
-	for (i = 0; i < iface->bNumEndpoints; i++) {
-		
-		if ((iface->ep_desc[i].bmAttributes &  USB_ENDPOINT_XFERTYPE_MASK)
-		    == USB_ENDPOINT_XFER_BULK) {
+	for (i = 0; i < iface->desc.bNumEndpoints; i++) {
+		/* is it an BULK endpoint? */
+		if ((iface->ep_desc[i].bmAttributes &
+		     USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_BULK) {
 			if (iface->ep_desc[i].bEndpointAddress & USB_DIR_IN)
 				ss->ep_in = iface->ep_desc[i].bEndpointAddress &
 					USB_ENDPOINT_NUMBER_MASK;
-				
 			else
-				ss->ep_out = iface->ep_desc[i].bEndpointAddress &
+				ss->ep_out =
+					iface->ep_desc[i].bEndpointAddress &
 					USB_ENDPOINT_NUMBER_MASK;
-				
 		}
-		
-		if ((iface->ep_desc[i].bmAttributes & USB_ENDPOINT_XFERTYPE_MASK)
-		    == USB_ENDPOINT_XFER_INT) {
+
+		/* is it an interrupt endpoint? */
+		if ((iface->ep_desc[i].bmAttributes &
+		    USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_INT) {
 			ss->ep_int = iface->ep_desc[i].bEndpointAddress &
 				USB_ENDPOINT_NUMBER_MASK;
 			ss->irqinterval = iface->ep_desc[i].bInterval;
 		}
 	}
-	
 	USB_STOR_PRINTF("Endpoints In %d Out %d Int %d\n",
 		  ss->ep_in, ss->ep_out, ss->ep_int);
 

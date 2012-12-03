@@ -855,7 +855,7 @@ PLLB = (((PLLB>>16)&0xFF)+1)/((((PLLB>>8)&0x3F)+1)*(1<<(PLLB&7)));
 	return 0;
 }
 
-static void wmt_nfc_init(struct wmt_nand_info *info, struct mtd_info *mtd)
+static int wmt_nfc_init(struct wmt_nand_info *info, struct mtd_info *mtd)
 {
 	int busw, nand_maf_id, page_per_block, CE = 0;
 	unsigned int spec_clk, T, Thold, divisor, status = 0;
@@ -900,9 +900,10 @@ page_per_block = *(volatile unsigned long *)PMNAND_ADDR;
 			printk(KERN_WARNING "No NAND device found!!!\n");
 			chip->select_chip(mtd, -1);
 			if (nand_maf_id) {
-				printk(KERN_WARNING "nand flash identify fail(unknow id)\n");
-				while(1);/*return PTR_ERR(type);*/
+				printk(KERN_WARNING "nand flash identify fail(unknow id), nand_maf_id=0x%x\n", nand_maf_id);
+				/*return PTR_ERR(type);*/
 			}
+			return 2;
 		} else {
 			/*printk(KERN_WARNING "chip swap to chip 1!!!\n");*/
 			chip_swap = 1;
@@ -988,7 +989,7 @@ page_per_block = *(volatile unsigned long *)PMNAND_ADDR;
 	status = wmt_calc_clock(mtd, spec_clk, &T, &divisor, &Thold);
 	if (status) {
 		printk("timming setting fail");
-		return;
+		return 1;
 	}
 	NFC_RWTimming = ((Thold&0xFF) << 12) + ((T + (Thold&0xFF)) << 8) +
 	/* nand write timing 1T2T has bug, will cause write fail only can set 2T4T */
@@ -1003,6 +1004,8 @@ page_per_block = *(volatile unsigned long *)PMNAND_ADDR;
 	info->reg + WMT_NFC_READ_CYCLE_PULE_CTRL);
 	writel(readl(info->reg + WMT_NFC_READ_CYCLE_PULE_CTRL) | NFC_RWTimming,
 	info->reg + WMT_NFC_READ_CYCLE_PULE_CTRL);
+	
+	return 0;
 }
 
 #if 0
@@ -2022,6 +2025,8 @@ static void wmt_nand_cmdfunc(struct mtd_info *mtd, unsigned command, int column,
 	#endif
 	info->isr_cmd = command;
 	info->phase = first4k218;
+	if (readl(info->reg + WMT_NFC_ECC_BCH_CTRL) & DIS_BCH_ECC)
+		info->phase = 2;
 	/*printk(KERN_NOTICE "\rWMT_NFC_MISC_STAT_PORT: %x\n",
 	readb(info->reg + WMT_NFC_MISC_STAT_PORT));*/
 	/* Emulate NAND_CMD_READOOB and oob layout need to deal with specially */
@@ -2127,7 +2132,10 @@ read_second4k218:
 				/*printk(KERN_NOTICE "config dma: read page_addr:%x\n", page_addr);*/
 				/* 1: read, 0:data, -1:  */
 				/*printk(KERN_NOTICE "read data area column %x writesize %x\n", column, mtd->writesize);*/
-				wmt_nfc_dma_cfg(mtd, ((mtd->writesize < 8192)? mtd->writesize : mtd->writesize/2), 0, -1, -1);
+				if (info->phase == 2) {
+					wmt_nfc_dma_cfg(mtd, ((mtd->writesize < 8192)? mtd->writesize : (mtd->writesize+mtd->oobsize-(mtd->oobsize%16))), 0, -1, -1);
+				} else
+					wmt_nfc_dma_cfg(mtd, ((mtd->writesize < 8192)? mtd->writesize : mtd->writesize/2), 0, -1, -1);
 				/*print_register(mtd);*/
 			#endif
 		}
@@ -2529,7 +2537,7 @@ read_second4k218:
 			return;
 		}
 
-		if (mtd->writesize >= 8192 && (column == 0 && command == NAND_CMD_READ0)) {
+		if (mtd->writesize >= 8192 && (column == 0 && command == NAND_CMD_READ0) && info->phase == first4k218) {
 			info->phase = second4k218;
 			goto read_second4k218;
 		}
@@ -3351,25 +3359,40 @@ static int wmt_nand_read_oob(struct mtd_info *mtd, struct nand_chip *chip, int p
 static int wmt_nand_read_bb_oob(struct mtd_info *mtd, struct nand_chip *chip,
 int page, int sndcmd)
 {
+	unsigned int tmp, bch;
 	struct wmt_nand_info *info = wmt_nand_mtd_toinfo(mtd);
 	#ifdef NAND_DEBUG
 	printk(KERN_NOTICE "\r enter in wmt_nand_read_bb_oob()\n");
 	#endif
-	/* disable hardware ECC  */
-	writeb(readb(info->reg + WMT_NFC_MISC_CTRL) | 0x04, info->reg + WMT_NFC_MISC_CTRL);
-	ecc_type = 0;
-	nfc_ecc_set(info, 0);   /* off hardware ecc  */
-	set_ecc_engine(info, 0);  /* harming ECC structure for bad block check*/
+	tmp = readl(info->reg + WMT_NFC_NAND_TYPE_SEL);
+	bch = readl(info->reg + WMT_NFC_ECC_BCH_CTRL);
+	writeb((tmp & 0xfffffffc)+3,	info->reg + WMT_NFC_NAND_TYPE_SEL);
+	writel(readl(info->reg + WMT_NFC_ECC_BCH_CTRL) & 0xfffffff8, info->reg + WMT_NFC_ECC_BCH_CTRL);
+	writel(readl(info->reg + WMT_NFC_ECC_BCH_CTRL) | DIS_BCH_ECC, info->reg + WMT_NFC_ECC_BCH_CTRL);
+	writew(eccBCH_inetrrupt_disable, info->reg + WMT_NFC_ECC_BCH_INT_MASK);
+	writel(readl(info->reg + WMT_NFC_ECC_BCH_CTRL) | READ_RESUME,
+	info->reg + WMT_NFC_ECC_BCH_CTRL);
+	//ecc_type = 0;
+	//nfc_ecc_set(info, 0);   /* off hardware ecc  */
+	//set_ecc_engine(info, 0);  /* harming ECC structure for bad block check*/
 	/* chip->ecc.layout = &wmt_hm_oobinfo_2048;*/
 
 	if (sndcmd) {
-		chip->cmdfunc(mtd, NAND_CMD_READOOB, 0, page);
+		chip->cmdfunc(mtd, NAND_CMD_READ0, 0, page);
 		sndcmd = 0;
 	}
+	info->datalen = mtd->writesize;
 	chip->read_buf(mtd, chip->oob_poi, 64);
-	nfc_ecc_set(info, 1);   /* on hardware ecc  */
+	//memcpy(chip->oob_poi, info->reg+ECC_FIFO_0, 64);
+	//nfc_ecc_set(info, 1);   /* on hardware ecc  */
+	writel(readl(info->reg + WMT_NFC_ECC_BCH_CTRL) & 0xfffffff7, info->reg + WMT_NFC_ECC_BCH_CTRL);
+	writel(readl(info->reg + WMT_NFC_ECC_BCH_CTRL) | bch, info->reg + WMT_NFC_ECC_BCH_CTRL);
+	writeb(tmp,	info->reg + WMT_NFC_NAND_TYPE_SEL);
+	writew(eccBCH_inetrrupt_disable, info->reg + WMT_NFC_ECC_BCH_INT_MASK);
+	writel(readl(info->reg + WMT_NFC_ECC_BCH_CTRL) | READ_RESUME,
+	info->reg + WMT_NFC_ECC_BCH_CTRL);
 	#ifndef NAND_HARMING_ECC
-	ecc_type = 1;
+	//ecc_type = 1;
 	if (ECC8BIT_ENGINE == 1)
 		set_ecc_engine(info, 3);  /* BCH ECC structure 12bit ecc engine*/
 	else
@@ -3850,7 +3873,7 @@ static int wmt_nand_remove(struct platform_device *pdev)
 	/* free the common resources */
 
 	if (info->reg != NULL) {
-		iounmap(info->reg);
+		//iounmap(info->reg);
 		info->reg = NULL;
 	}
 
@@ -3999,8 +4022,9 @@ static irqreturn_t nfc_pdma_isr(int irq, void *dev_id)
 	struct wmt_nand_info *info = (struct wmt_nand_info *)dev_id;
 	disable_irq_nosync(irq);
 	//spin_lock(&host->lock);
-	writel(readl(info->reg + NFC_DMA_ISR)&NAND_PDMA_IER_INT_STS, info->reg + NFC_DMA_ISR);
+
 	writel(0, info->reg + NFC_DMA_IER);
+	writel(/*readl(info->reg + NFC_DMA_ISR)&*/NAND_PDMA_IER_INT_STS, info->reg + NFC_DMA_ISR);
 	//printk(" pdmaisr ");
 	info->dma_finish = 1;
 	WARN_ON(info->done_data == NULL);
@@ -4290,7 +4314,9 @@ static int wmt_nand_probe(struct platform_device *pdev)
 			ECC8BIT_ENGINE = 1;
 	}*/
 	info->datalen = 0;
-	wmt_nfc_init(info, &nmtd->mtd);
+	ret1 = wmt_nfc_init(info, &nmtd->mtd);
+	if (ret1 == 2)
+		goto out_free_dma;
 	writeb(0xff, info->reg + WMT_NFC_CHIP_ENABLE_CTRL); //chip disable 
 	/*for (j = 0; j < 0xA8; j += 16)
 				printk(KERN_NOTICE "NFCR%x ~ NFCR%x = 0x%8.8x 0x%8.8x 0x%8.8x 0x%8.8x\r\n",
@@ -4454,9 +4480,8 @@ out_free_dma:
 		dma_free_coherent(&pdev->dev, 8640/*4224*/ + 0x300, info->dmabuf, info->dmaaddr);
 	/*else
 		dma_free_coherent(&pdev->dev, 528 + 0x300, info->dmabuf, info->dmaaddr);*/
-unmap:
 fr_regular_isr:
-
+unmap:
 exit_error:
 	wmt_nand_remove(pdev);
 
@@ -4496,13 +4521,16 @@ int wmt_nand_resume(struct platform_device *pdev)
 {
 	struct wmt_nand_info *info = dev_get_drvdata(&pdev->dev);
 	struct wmt_nand_mtd *nmtd;
+	int ret;
 	*(volatile unsigned long *)PMCEU_ADDR |= (0x0010000);/*add by vincent*/
 	if (info) {
 			nmtd = info->mtds;
 		if (((*(volatile unsigned long *)(GPIO_BASE_ADDR + 0x100))&6) == 2)
 			writel(0x0, info->reg + WMT_NFC_NANDFLASH_BOOT);
 		/* initialise the hardware */
-		wmt_nfc_init(info, &nmtd->mtd);
+		ret = wmt_nfc_init(info, &nmtd->mtd);
+		if (ret == 2)
+			while(ret);
 		nfc_ecc_set(info, 1);  /* on hw ecc */
 		/* Set up DMA address */
 		/*writel(info->dmaaddr & 0xffffffff, info->reg + NFC_DMA_DAR);*/

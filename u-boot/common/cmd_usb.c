@@ -36,6 +36,9 @@
 #ifdef CONFIG_USB_STORAGE
 static int usb_stor_curr_dev=-1; /* current device */
 #endif
+#ifdef CONFIG_USB_HOST_ETHER
+static int usb_ether_curr_dev = -1; /* current ethernet device */
+#endif
 
 /* some display routines (info command) */
 char * usb_get_class_desc(unsigned char dclass)
@@ -152,47 +155,66 @@ void usb_display_string(struct usb_device *dev,int index)
 
 void usb_display_desc(struct usb_device *dev)
 {
-	if (dev->descriptor.bDescriptorType==USB_DT_DEVICE) {
-		printf("%d: %s,  USB Revision %x.%x\n",dev->devnum,usb_get_class_desc(dev->config.if_desc[0].bInterfaceClass),
-			(dev->descriptor.bcdUSB>>8) & 0xff,dev->descriptor.bcdUSB & 0xff);
-		if (strlen(dev->mf) || strlen(dev->prod) || strlen(dev->serial))
-			printf(" - %s %s %s\n",dev->mf,dev->prod,dev->serial);
+	if (dev->descriptor.bDescriptorType == USB_DT_DEVICE) {
+		printf("%d: %s,  USB Revision %x.%x\n", dev->devnum,
+		usb_get_class_desc(dev->config.if_desc[0].desc.bInterfaceClass),
+				   (dev->descriptor.bcdUSB>>8) & 0xff,
+				   dev->descriptor.bcdUSB & 0xff);
+
+		if (strlen(dev->mf) || strlen(dev->prod) ||
+		    strlen(dev->serial))
+			printf(" - %s %s %s\n", dev->mf, dev->prod,
+				dev->serial);
 		if (dev->descriptor.bDeviceClass) {
 			printf(" - Class: ");
-			usb_display_class_sub(dev->descriptor.bDeviceClass,dev->descriptor.bDeviceSubClass,dev->descriptor.bDeviceProtocol);
+			usb_display_class_sub(dev->descriptor.bDeviceClass,
+					      dev->descriptor.bDeviceSubClass,
+					      dev->descriptor.bDeviceProtocol);
 			printf("\n");
+		} else {
+			printf(" - Class: (from Interface) %s\n",
+			       usb_get_class_desc(
+				dev->config.if_desc[0].desc.bInterfaceClass));
 		}
-		else {
-			printf(" - Class: (from Interface) %s\n",usb_get_class_desc(dev->config.if_desc[0].bInterfaceClass));
-		}
-		printf(" - PacketSize: %d  Configurations: %d\n",dev->descriptor.bMaxPacketSize0,dev->descriptor.bNumConfigurations);
-		printf(" - Vendor: 0x%04x  Product 0x%04x Version %d.%d\n",dev->descriptor.idVendor,dev->descriptor.idProduct,(dev->descriptor.bcdDevice>>8) & 0xff,dev->descriptor.bcdDevice & 0xff);
+		printf(" - PacketSize: %d  Configurations: %d\n",
+			dev->descriptor.bMaxPacketSize0,
+			dev->descriptor.bNumConfigurations);
+		printf(" - Vendor: 0x%04x  Product 0x%04x Version %d.%d\n",
+			dev->descriptor.idVendor, dev->descriptor.idProduct,
+			(dev->descriptor.bcdDevice>>8) & 0xff,
+			dev->descriptor.bcdDevice & 0xff);
 	}
 
 }
 
-void usb_display_conf_desc(struct usb_config_descriptor *config,struct usb_device *dev)
+void usb_display_conf_desc(struct usb_configuration_descriptor *config,
+			   struct usb_device *dev)
 {
-	printf("   Configuration: %d\n",config->bConfigurationValue);
-	printf("   - Interfaces: %d %s%s%dmA\n",config->bNumInterfaces,(config->bmAttributes & 0x40) ? "Self Powered " : "Bus Powered ",
-	(config->bmAttributes & 0x20) ? "Remote Wakeup " : "",config->MaxPower*2);
+	printf("   Configuration: %d\n", config->bConfigurationValue);
+	printf("   - Interfaces: %d %s%s%dmA\n", config->bNumInterfaces,
+	       (config->bmAttributes & 0x40) ? "Self Powered " : "Bus Powered ",
+	       (config->bmAttributes & 0x20) ? "Remote Wakeup " : "",
+		config->bMaxPower*2);
 	if (config->iConfiguration) {
 		printf("   - ");
-		usb_display_string(dev,config->iConfiguration);
+		usb_display_string(dev, config->iConfiguration);
 		printf("\n");
 	}
 }
 
-void usb_display_if_desc(struct usb_interface_descriptor *ifdesc,struct usb_device *dev)
+void usb_display_if_desc(struct usb_interface_descriptor *ifdesc,
+			 struct usb_device *dev)
 {
-	printf("     Interface: %d\n",ifdesc->bInterfaceNumber);
-	printf("     - Alternate Settings %d, Endpoints: %d\n",ifdesc->bAlternateSetting,ifdesc->bNumEndpoints);
+	printf("     Interface: %d\n", ifdesc->bInterfaceNumber);
+	printf("     - Alternate Setting %d, Endpoints: %d\n",
+		ifdesc->bAlternateSetting, ifdesc->bNumEndpoints);
 	printf("     - Class ");
-	usb_display_class_sub(ifdesc->bInterfaceClass,ifdesc->bInterfaceSubClass,ifdesc->bInterfaceProtocol);
+	usb_display_class_sub(ifdesc->bInterfaceClass,
+		ifdesc->bInterfaceSubClass, ifdesc->bInterfaceProtocol);
 	printf("\n");
 	if (ifdesc->iInterface) {
 		printf("     - ");
-		usb_display_string(dev,ifdesc->iInterface);
+		usb_display_string(dev, ifdesc->iInterface);
 		printf("\n");
 	}
 }
@@ -216,18 +238,18 @@ void usb_display_ep_desc(struct usb_endpoint_descriptor *epdesc)
 /* main routine to diasplay the configs, interfaces and endpoints */
 void usb_display_config(struct usb_device *dev)
 {
-	struct usb_config_descriptor *config;
-	struct usb_interface_descriptor *ifdesc;
+	struct usb_config *config;
+	struct usb_interface *ifdesc;
 	struct usb_endpoint_descriptor *epdesc;
-	int i,ii;
+	int i, ii;
 
-	config= &dev->config;
-	usb_display_conf_desc(config,dev);
-	for(i=0;i<config->no_of_if;i++) {
-		ifdesc= &config->if_desc[i];
-		usb_display_if_desc(ifdesc,dev);
-		for(ii=0;ii<ifdesc->no_of_ep;ii++) {
-			epdesc= &ifdesc->ep_desc[ii];
+	config = &dev->config;
+	usb_display_conf_desc(&config->desc, dev);
+	for (i = 0; i < config->no_of_if; i++) {
+		ifdesc = &config->if_desc[i];
+		usb_display_if_desc(&ifdesc->desc, dev);
+		for (ii = 0; ii < ifdesc->no_of_ep; ii++) {
+			epdesc = &ifdesc->ep_desc[ii];
 			usb_display_ep_desc(epdesc);
 		}
 	}
@@ -277,18 +299,18 @@ void usb_show_tree_graph(struct usb_device *dev,char *pre)
 	pre[index++]=' ';
 	pre[index++]= has_child ? '|' : ' ';
 	pre[index]=0;
-	printf(" %s (%s, %dmA)\n",usb_get_class_desc(dev->config.if_desc[0].bInterfaceClass),
-		dev->slow ? "1.5MBit/s" : "12MBit/s",dev->config.MaxPower * 2);
-	if (strlen(dev->mf) ||
-	   strlen(dev->prod) ||
-	   strlen(dev->serial))
-		printf(" %s  %s %s %s\n",pre,dev->mf,dev->prod,dev->serial);
-	printf(" %s\n",pre);
-	if (dev->maxchild>0) {
-		for(i=0;i<dev->maxchild;i++) {
-			if (dev->children[i]!=NULL) {
-				usb_show_tree_graph(dev->children[i],pre);
-				pre[index]=0;
+	printf(" %s (%s, %dmA)\n", usb_get_class_desc(
+					dev->config.if_desc[0].desc.bInterfaceClass),
+					portspeed(dev->speed),
+					dev->config.desc.bMaxPower * 2);
+	if (strlen(dev->mf) || strlen(dev->prod) || strlen(dev->serial))
+		printf(" %s  %s %s %s\n", pre, dev->mf, dev->prod, dev->serial);
+	printf(" %s\n", pre);
+	if (dev->maxchild > 0) {
+		for (i = 0; i < dev->maxchild; i++) {
+			if (dev->children[i] != NULL) {
+				usb_show_tree_graph(dev->children[i], pre);
+				pre[index] = 0;
 			}
 		}
 	}
@@ -450,13 +472,17 @@ int do_usb (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 
 	if ((strncmp(argv[1], "reset", 5) == 0) ||
 		 (strncmp(argv[1], "start", 5) == 0)){
-		//usb_stop();
+		usb_stop();
 		printf("(Re)start USB...\n");
 		i = usb_init();
 #ifdef CONFIG_USB_STORAGE
 		/* try to recognize storage devices immediately */
 		if (i >= 0)
 	 		usb_stor_curr_dev = usb_stor_scan(1);
+#endif
+#ifdef CONFIG_USB_HOST_ETHER
+			/* try to recognize ethernet devices immediately */
+			usb_ether_curr_dev = usb_host_eth_scan(1);
 #endif
 		return 0;
 	}

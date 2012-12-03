@@ -190,6 +190,7 @@ int lcd_set_mode(unsigned int *option)
 		if( p_lcd && p_lcd->uninitial ){
 			p_lcd->uninitial();
 		}
+		p_lcd = 0;
 	}
 	return 0;
 }
@@ -201,10 +202,9 @@ int lcd_check_plugin(int hotplug)
 
 int lcd_config(vout_info_t *info)
 {
-	info->resx = p_lcd->timing.hpixel;
-	info->resy = p_lcd->timing.vpixel;
-	info->timing = p_lcd->timing;
-	info->fps = p_lcd->fps;
+//	info->resx = p_lcd->timing.hpixel;
+//	info->resy = p_lcd->timing.vpixel;
+//	info->fps = p_lcd->fps;
 	return 0;
 }
 

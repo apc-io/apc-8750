@@ -70,7 +70,7 @@ enum dev_id {
  DEV_MSVD  = 64+4,
  DEV_TSBK  = 64+5,
  DEV_SAE   = 64+6,
- DEV_HDCP  = 64+7,
+ DEV_HDCE  = 64+7,
  DEV_H264  = 64+8,
  DEV_CIR   = 64+15,
  DEV_NA12  = 64+16,

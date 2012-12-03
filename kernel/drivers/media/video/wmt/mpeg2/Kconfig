@@ -1,8 +1,0 @@
-#
-# Multimedia Video device configuration
-#
-
-config WMT_VIDEO_DECODE_MPEG2
-	tristate "WonderMedia Hardware MPEG 1/2 decoder"
-	---help---
-	  Say Y here to use hardware to decode MPEG 1/2 files

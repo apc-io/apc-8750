@@ -464,17 +464,50 @@ config DEFAULT_FPS
 	depends on FB_WMT
 	default 60
 
-config VIDEO_BUFFER_SIZE
-    int "Size of memroy reserved for video buffer (KB)"
-    default "16384"
-	depends on FB_WMT
+config WMT_MB
+	bool "WMT memblock support"
+	depends on ARCH_WMT
+	default y
+	help
+	  This is memory managment driver which manipulates frambuffers 
+	  for wondermedia codec. Say Y here.
+
+choice
+    prompt "Reserve memory source"
+	depends on WMT_MB
+    default WMT_MB_RESERVE_FROM_IO
+
+config WMT_MB_RESERVE_FROM_IO
+	bool "Reserve from IO"
+	help
+	  Reserve memory directly at begining. And register this region
+	  into kernel. Reserve memroy address start from the end of total
+	  memroy.
+
+config WMT_MB_RESERVE_FROM_KERNEL
+	bool "Reserve from KERNEL"
+	help
+	  Allocate memory directly through kernel space.
+
+endchoice
+
+config WMT_MB_DYNAMIC_ALLOCATE_SUPPORT
+	bool "Dynamic memory allocate support"
+	depends on WMT_MB && WMT_MB_RESERVE_FROM_KERNEL
+	default n
+	help
+	  Dynamic allcate memory from kernal when memory is not enough.
+
+config WMT_MB_SIZE
+    int "Size of memroy reserved for memblock (MB)"
+    depends on WMT_MB
+    default "16"
     help
-      Set the reserved memory size. Memblock driver will reserved
-      the required memory for video use such as frame buffers, video
+      Set the reserved memory size. Memblock driver will reserve
+      the required memory size for video such as frame buffers, video
       decode buffer, video display buffer, etc. This could prevent
       video decoder from lacking continue memroy for decoding. The
-      reserved size will be Kbyte unit and auto change to 4 Kbytes
-      alignment.
+      reserved size will be Mbyte unit.
 
 config FB_WMT_GE
 	bool "WonderMedia GE Framebuffer Support"

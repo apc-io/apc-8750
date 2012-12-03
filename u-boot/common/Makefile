@@ -48,6 +48,7 @@ COBJS	= main.o ACEX1K.o altera.o bedbug.o circbuf.o \
 	  exports.o \
 	  wmt_display/pwm.o wmt_display/wmt-ost.o wmt_display/vpp-osif.o \
 	  wmt_display/govrh.o wmt_display/vout.o wmt_display/lcd.o wmt_display/lvds.o wmt_display/vpp.o \
+	  wmt_display/disp.o wmt_display/disp-attr.o wmt_display/vppm.o \
 	  wmt_display/hdmi.o wmt_display/sw_i2c.o wmt_display/parse-edid.o wmt_display/vout-wmt.o  \
   	  wmt_display/devices/lcd-oem.o wmt_display/devices/lcd-AUO-A080SN01.o wmt_display/devices/lcd-INNOLUX-AT070TN83.o\
 	  wmt_display/devices/lcd-CHILIN-LW700at9003.o wmt_display/devices/lcd-EKING-EK08009-70135.o \

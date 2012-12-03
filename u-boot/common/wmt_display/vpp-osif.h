@@ -66,17 +66,16 @@
 	#include <linux/slab.h>
 	#include <linux/module.h>
 	#include <linux/i2c.h>
+	#include "memblock.h"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29)
     #include <mach/hardware.h>
     #include <mach/wmt_mmap.h>
-	#include <mach/memblock.h>
 
     #define SA_INTERRUPT IRQF_DISABLED
 #else
     #include <asm/arch-wmt/hardware.h>
     #include <asm/arch/wmt_mmap.h>
-	#include <asm/arch-wmt/memblock.h>	
 #endif
 /* -------------------------------------------------- */
 #else	// __KERNEL__
@@ -108,7 +107,7 @@ extern	"C" {
 	#define U16 unsigned short
 	#define U8 unsigned char
 
-	#define mb_allocate(a)	malloc(a)
+	#define mb_alloc(a)	malloc(a)
 	#define kmalloc(a,b) 	malloc(a)
 	#define kfree(a)		free(a)
 	#define GFP_KERNEL		0

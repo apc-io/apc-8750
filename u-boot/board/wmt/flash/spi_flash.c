@@ -64,6 +64,7 @@
 #define SST_MANUF      0xBF
 #define WB_MANUF       0xEF
 #define ATMEL_MANUF    0x1F
+#define GD_MANUF    	 0xC8
 
 /* EON */
 #define EON_25P16_ID   0x2015 /* 2 MB */
@@ -100,6 +101,10 @@
 
 /* ATMEL */
 #define AT_25DF041A_ID 0x4401 /* 512KB */
+
+/* GD -Giga Device- */
+#define GD_25Q40_ID			0x4013 /* 512KB */
+#define GD_25Q128_ID		0x4018 /* 16MB */
 
 #define SF_IDALL(x, y)	((x<<16)|y)
 
@@ -138,7 +143,11 @@ struct wm_sf_dev_t sf_ids[] = {
 	{SF_IDALL(WB_MANUF, WB_X32_ID), 0x400000, 0x10000},
 	{SF_IDALL(WB_MANUF, WB_X64_ID), 0x800000, 0x10000},
 	{SF_IDALL(WB_MANUF, WB_X128_ID), 0x1000000, 0x10000},
+	/* ATMEL */	
 	{SF_IDALL(ATMEL_MANUF, AT_25DF041A_ID), 0x80000, 0x10000},
+	/* GD */
+	{SF_IDALL(GD_MANUF, GD_25Q40_ID), 0x80000, 0x10000},
+	{SF_IDALL(GD_MANUF, GD_25Q128_ID), 0x1000000, 0x10000},
 };
 
 sfreg_t *sfreg ;

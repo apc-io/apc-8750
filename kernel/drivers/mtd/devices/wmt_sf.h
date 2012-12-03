@@ -102,6 +102,7 @@ struct wmt_flash_info_t {
 #define SST_MANUFACT	0xBF
 #define WB_MANUFACT 0xEF
 #define ATMEL_MANUF    0x1F
+#define GD_MANUF    0xC8
 
 /* EON */
 #define EON_25P16_ID	0x2015 /* 2 MB */
@@ -134,9 +135,15 @@ struct wmt_flash_info_t {
 #define WB_X16A_ID	0x3015	/* 2 MB */
 #define WB_X32_ID	0x3016	/* 4 MB */
 #define WB_X64_ID	0x3017	/* 8 MB */
+#define WB_X64_25Q64_ID	0x4017	/* 8 MB */
+#define WB_X128_ID	0x4018	/* 16 MB */
 
 /* ATMEL */
 #define AT_25DF041A_ID 0x4401 /* 512KB */
+
+/* GD -Giga Device- */
+#define GD_25Q40_ID			0x4013 /* 512KB */
+#define GD_25Q128_ID		0x4018 /* 16MB */
 
 /* ST M25P64 CMD */
 #define SF_CMD_WREN      0x06

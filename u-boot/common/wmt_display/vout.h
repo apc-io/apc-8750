@@ -80,8 +80,8 @@ typedef struct {
 	int resy;
 	int bpp;
 	int fps;
-
-	vpp_timing_t timing;
+	unsigned int pixclk;
+	unsigned int option;
 } vout_info_t;
 
 typedef struct {
@@ -125,6 +125,7 @@ typedef struct {
 	vout_dev_ops_t *dev_ops;
 	char name[10];
 	unsigned int option[3];
+	unsigned int vo_option;
 	int resx;
 	int resy;
 	int pixclk;
@@ -174,10 +175,14 @@ void vout_plug_detect(vout_mode_t mode);
 void vo_set_lcd_id(int id);
 int vo_get_lcd_id(void);
 int vo_i2c_proc(int id,unsigned int addr,unsigned int index,char *pdata,int len);
+vpp_tvsys_t vo_res_to_tvsys(unsigned int resx,unsigned int resy,int interlace);
+void vo_tvsys_to_res(vpp_tvsys_t tvsys,vout_info_t *info);
 int vout_set_audio(vout_audio_t *arg);
 void vout_change_status(vout_t *vo,int cmd,int arg,int ret);
 char *vout_get_edid(vout_mode_t mode);
-int	vout_find_video_mode(vout_info_t *info);
+int vout_check_ratio_16_9(unsigned int resx,unsigned int resy);
+vpp_timing_t *vout_find_video_mode(int no,vout_info_t *info);
+int vout_find_edid_support_mode(unsigned int *resx,unsigned int *resy,unsigned int *fps,int r_16_9);
 
 #ifdef	__cplusplus
 }

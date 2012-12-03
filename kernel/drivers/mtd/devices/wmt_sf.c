@@ -513,12 +513,15 @@ static int sf_read(struct mtd_info *mtd, loff_t from, size_t len,
 
 	REG32_VAL(PMCEU_ADDR) |= SF_CLOCK_EN;
 
-	rc = spi_read_status(0);
-	if (rc)
-		printk("sfread: sf0 is busy");
-	rc = spi_read_status(1);
-	if (rc)
-		printk("sfread: sf1 is busy");
+	if ((from + MTDSF_PHY_ADDR) >= g_sf_info[0].phy) {
+		rc = spi_read_status(0);
+		if (rc)
+			printk("sfread: sf0 is busy");
+	} else {
+		rc = spi_read_status(1);
+		if (rc)
+			printk("sfread: sf1 is busy");
+	}
 	/*printk("sf_read(pos:%x, len:%x)\n", (long)from, (long)len);*/
 	if (from + len > mtd->size) {
 		printk(KERN_ERR "sf_read() out of bounds (%lx > %lx)\n", (long)(from + len), (long)mtd->size);
@@ -546,12 +549,15 @@ int spi_flash_sector_write(struct sfreg_t *sfreg, unsigned char *sf_base_addr,
 
 	REG32_VAL(PMCEU_ADDR) |= SF_CLOCK_EN;
 	udelay(1);
-	rc = spi_read_status(0);
-	if (rc)
-		printk("wr c0 wait status ret=%d\n", rc);
-	rc = spi_read_status(1);
-	if (rc)
-		printk("wr c1 wait status ret=%d\n", rc);
+	if ((to + MTDSF_PHY_ADDR) >= g_sf_info[0].phy) {
+		rc = spi_read_status(0);
+		if (rc)
+			printk("wr c0 wait status ret=%d\n", rc);
+	} else {
+		rc = spi_read_status(1);
+		if (rc)
+			printk("wr c1 wait status ret=%d\n", rc);
+	}
 	sfreg->SPI_WR_EN_CTR = 0x03;
 
 	while (len >= 8) {
