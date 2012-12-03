@@ -1,0 +1,14 @@
+#
+# Multimedia Video device configuration
+#
+
+config WMT_V4L2_TV_DECODER
+	tristate "WonderMedia V4L2 TV_DECODER Support"
+	default y
+	---help---
+	  Say Y here to use hardware TV_DECODER Support.
+
+
+  
+
+ 	

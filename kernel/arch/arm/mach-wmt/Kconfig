@@ -1,0 +1,106 @@
+if ARCH_WMT
+
+menu "WonderMedia Technology Implementations"
+
+config WMT_EVB
+        bool "WonderMedia Technology Evaluation Board"
+        depends on ARCH_WMT
+        default y
+	---help---
+	  Say Y here if you want to config the WonderMedia Technology specific parameters.
+
+choice
+	prompt "Select WonderMedia Technology evaluation board type"
+	depends on WMT_EVB
+	default WM0001
+	---help---
+	  Choose the type of WonderMedia Technology evaluation board type.
+	  There are four types of WonderMedia Technology EVB, depend on the mounted components.
+
+config WM0001
+	bool "WM0001"
+	---help---
+	  Say Y here if you intend to build kernel on VT9043A1.
+
+endchoice
+
+config WMT_USE_BOOTLOADER_ATAG
+	bool "Bootloader kernel parameter support"
+	depends on WMT_EVB
+	---help---
+	Say Y here if you want to use kernel parameters passed from the arm bootloader.
+
+config WMT_FIXUP_ATAG
+	bool "Force to fixup kernel parameter"
+	depends on WMT_EVB && WMT_USE_BOOTLOADER_ATAG
+	---help---
+	  Say Y here if you want to fixup the WonderMedia Technology kernel boot parameters.
+	  It is a temp solution if ATAG passing have problem or you don't 
+	  know how exactly setup kernel parameters.
+
+comment "Select WonderMedia Technology based drivers"
+
+config WMT_REGMON
+	tristate "WonderMedia Technology registers monitor (EXPERIMENTAL)"
+
+	---help---
+	  Say Y here if you want to access WonderMedia Technology registers via proc_fs interface.
+	  Users can access WonderMedia Technology registers via /proc/wmt/registers/XXXX files.
+	  This program designed to be a monitor of WonderMedia Technology registers.
+	  It is just for debugging and testing purpose under the runtime kernel,
+	  but notice that I did not implement it with full supporting to all
+	  registers because there are some registers are not appropriate to show
+	  to users, such as registers with read to clean behavior.
+
+	  Before using this interface, users should know the registers behavior.
+	  Detail registers behavior please refer to WonderMedia Technology hardware relative
+	  documents.
+
+choice
+	prompt "Select registers monotor read interface format"
+	depends on WMT_REGMON
+	default WMT_REGMON_RF_A
+
+	---help---
+	  Choose the format of registers monitor read interface.
+
+config WMT_REGMON_RF_A
+	bool "Only value"
+
+	---help---
+	  This is a basic format of register monotor interface.
+
+	  In the reading of each register, it will only return the value
+	  of this register.
+
+config WMT_REGMON_RF_B
+	bool "Value and register description"
+
+	---help---
+	  This is an extended format of register monotor interface.
+
+	  In the reading of each register, it will return the value
+	  of this register plus a simple description about the name of
+	  this register.
+endchoice
+
+config WMT_REGMON_WF
+	bool "Registers monitor write interface (DANGEROUS)"
+	depends on WMT_REGMON
+
+	---help---
+	  Say Y here if you want the writing interface in register monotor.
+	  Say N here the dirver will ignore any writing via write interface.
+
+	  The DANGEROUS means you must know about the behavior of specific
+	  registers, if you don't know, writing somecritical registers might
+	  cause the whole system crached.
+
+	  Detail registers behavior please refer to VT8610 hardware relative
+	  documents.
+	  
+	  
+endmenu
+
+endif
+

@@ -1,0 +1,54 @@
+config SND_WMT_SOC
+	bool "SoC Audio for the WMT chip"
+	depends on ARCH_WMT && SND && SND_SOC
+	help
+	  Say Y or M if you want to add support for codecs attached to
+	  the WMT AC97, I2S interface. You will also need
+	  to select the audio interfaces to support below.
+
+#
+# WMT ALSA I2S driver
+#
+config SND_WMT_SOC_I2S
+        bool "SoC I2S Audio support for WMT"
+        depends on SND_WMT_SOC
+        ---help---
+          Say Y or M if you want to add support for codecs attached to
+	  		the WMT I2S interface.
+
+config I2S_HW_DAC
+        bool "HW_DAC"
+        depends on SND_WMT_SOC_I2S
+        select SND_SOC_HWDAC
+        ---help---
+          Say Y here if you want to use HW DAC.
+          	  		
+config I2S_CODEC_VT1602
+        bool "VT1602"
+        depends on SND_WMT_SOC_I2S
+        select SND_SOC_VT1602
+        ---help---
+          Say Y here if you want to use VT1602 as the I2S Codec.
+          
+config I2S_CODEC_WM8900
+        bool "WM8900"
+        depends on SND_WMT_SOC_I2S
+        select SND_SOC_WM8900
+        ---help---
+          Say Y here if you want to use WM8900 as the I2S Codec.
+          
+config I2S_CODEC_VT1603
+        bool "VT1603"
+        depends on SND_WMT_SOC_I2S
+        select SND_SOC_VT1603
+        ---help---
+          Say Y here if you want to use VT1603 as the I2S Codec.
+
+config I2S_CODEC_FM34
+        bool "FM34"
+        depends on SND_WMT_SOC_I2S
+        select SND_SOC_FM34
+        ---help---
+          Say Y here if you want to use fm34 to echo cancallation. 
+         
+

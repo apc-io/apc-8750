@@ -1,0 +1,11 @@
+#
+# Multimedia Video device configuration
+#
+
+config WMT_VIDEO_DECODE_RV
+	tristate "WonderMedia Hardware RV decoder"
+	---help---
+	  Say Y here to use hardware to decode RV files	
+  
+
+ 	

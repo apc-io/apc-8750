@@ -1,0 +1,8 @@
+#
+# Multimedia Video device configuration
+#
+
+config WMT_VIDEO_DECODE_MPEG4
+	tristate "WonderMedia Hardware MPEG4 decoder"
+	---help---
+	  Say Y here to use hardware to decode MPEG4 files

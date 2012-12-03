@@ -1,0 +1,29 @@
+Date     :2007/01/25
+Function :U-boot ethernet driver
+1.eth_init() :ok!have fixed the bug of reallocation of memory
+2.eth_tx()   :ok!
+3.eth_rx()   :ok!
+3.mac_halt() :ok!equal adapteshutdown()
+4.Mii_read() :not finished yet!
+5.Mii_write():not finished yet!
+6.Original file in mac are moved to wmt and makefile is modifed
+7.output message is omitted
+-------------------------------------------------------------------------------------------
+Date     :2007/01/25
+Function :U-boot ethernet driver
+1.eth_init() :ok!have fixed the bug of reallocation of memory
+2.eth_tx()   :ok!
+3.eth_rx()   :ok!
+3.mac_halt() :ok!equal adapteshutdown()
+4.Mii_read() :not finished yet!
+5.Mii_write():not finished yet!
+--------------------------------------------------------------------------------------------
+Date     :2007/01/24
+Function :U-boot ethernet driver
+1.eth_init() :ok!but it will reallocate memory and cause procedure not to go further
+2.eth_tx()   :ok!
+3.eth_rx()   :ok!
+3.mac_halt() :ok!do nothing!because halt will be processed before eth_init()
+4.Mii_read() :not finished yet!
+5.Mii_write():not finished yet!
+ 

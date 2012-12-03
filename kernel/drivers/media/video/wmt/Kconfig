@@ -1,0 +1,14 @@
+#
+# Multimedia Video device configuration
+#
+
+config WMT_VIDEO_LOCK
+	tristate "WonderMedia Video Lock"
+	---help---
+	  Say Y here to enable Video Lock
+
+config WMT_VIDEO_DMA
+	tristate "WonderMedia Video DMA"
+	---help---
+	  Say Y here to enable Video DMA.
+

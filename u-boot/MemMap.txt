@@ -1,0 +1,71 @@
+*****************************************
+*          Memory Map                   *
+*****************************************
+
+  0x3C0_0000 +---------------------+   
+             |                     |   
+             |      MAC Heap       |   
+             ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+             ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+             |                     |   
+             |                     |
+             +---------------------+   
+             |                     |   
+             |      Stack          |   
+             ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+             ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+             |                     |   
+             |                     |
+  0x3F4_FED8 +---------------------+
+             |    Global Data      |   128 Bytes
+  0x3F5_0000 +---------------------+
+             |                     |
+             |       Heap          |   192K Bytes
+             |                     |
+  0x3F8_0000 +---------------------+   
+             |                     |   
+             |       Code          |   
+             ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+             ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+             |                     |   
+             |                     |
+             +---------------------+
+             |       BSS           |   
+             |                     |   
+             ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+             ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+             |                     |   
+             |                     |
+  0x400_0000 +---------------------+
+
+
+
+*****************************************
+*          Source Trace                 *
+*****************************************
+MAC Heap:
+cpu/arm920t/wmt/gmacif.h
+  GMEMORY_BUFFER_START = 0x03C00000
+
+Stack:
+cpu/arm920t/start.S
+  stack_setup:
+  _TEXT_BASE(0x3F80000) - CFG_MALLOC_LEN(0x30000) - CFG_GBL_DATA_SIZE(0x80) = 0x3F4FED8
+
+Global Data:
+include/configs/wmt.h
+  CFG_GBL_DATA_SIZE = 128
+
+Heap:
+lib_arm/Board.c
+  mem_malloc_start:
+  _armboot_start(0x3F80000) - CFG_MALLOC_LEN(0x30000) = 0x3F50000
+
+Code 
+board/wmt/config.mk
+  TEXT_BASE = 0x03F80000
+
+BSS:
+cpu/arm920t/start.S
+  __bss_start:
+  board/wmt/u-boot.lds

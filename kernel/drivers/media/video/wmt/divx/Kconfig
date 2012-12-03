@@ -1,0 +1,8 @@
+#
+# Multimedia Video device configuration
+#
+
+config WMT_VIDEO_DECODE_DIVX
+	tristate "WonderMedia Hardware DIVX decoder"
+	---help---
+	  Say Y here to use hardware to decode DIVX files

@@ -1,0 +1,13 @@
+#
+
+#
+
+menu "BLCR Support"
+
+config BLCR_SUPPORT
+    tristate "Blcr Support"
+    default y
+	help
+	  blcr--checkpoint and restore
+	  
+endmenu

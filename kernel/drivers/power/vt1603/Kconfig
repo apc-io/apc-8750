@@ -1,0 +1,38 @@
+config WMT_VT1603_BATTERY
+        tristate "WonderMedia VT1603 Battery Support"
+        default m
+        depends on ARCH_WMT
+        ---help---
+          Say Y here if you have an WMT based board with battery
+          attached to it.
+          If unsure, say N.
+          To compile this driver as a module, choose M here: the
+          module will be called vt1603_bat.
+
+choice
+    prompt "VT1603 Battery interface Select"
+    default VT1603_BAT_I2C
+    depends on WMT_VT1603_BATTERY
+config VT1603_BAT_SPI
+        bool "SPI"
+        ---help---
+          Say Y here if you want to use SPI bus.
+config VT1603_BAT_I2C
+        bool "I2C"
+        ---help---
+          Say Y here if you want to use I2C bus.
+endchoice
+
+config VT1603_BATTERY_ENABLE
+        bool "VT1603 Battery Detecting Support"
+        default y
+        depends on WMT_VT1603_BATTERY
+        ---help---
+          Say Y here if you want to enable battery detecting.
+
+config VT1603_BATTERY_ALARM
+        bool "VT1603 Battery Alarm Support"
+        default y
+        depends on WMT_VT1603_BATTERY
+        ---help---
+          Say Y here if you want to enable battery alarm.

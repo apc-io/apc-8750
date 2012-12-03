@@ -1,0 +1,11 @@
+#
+# Multimedia Video device configuration
+#
+
+config WMT_VIDEO_DECODE_VC1
+	tristate "WonderMedia Hardware VC1 decoder"
+	---help---
+	  Say Y here to use hardware to decode VC1 files	
+  
+
+ 	

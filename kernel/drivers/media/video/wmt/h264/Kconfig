@@ -1,0 +1,8 @@
+#
+# Multimedia Video device configuration
+#
+
+config WMT_VIDEO_DECODE_H264
+	tristate "WonderMedia Hardware H264 decoder"
+	---help---
+	  Say Y here to use hardware to decode H264 files
