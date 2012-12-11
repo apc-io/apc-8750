@@ -308,6 +308,7 @@ typedef struct {
 
 	// vout
 	int vga_enable;
+	int vga_intsts;
 	
 	// hdmi
 	int hdmi_video_mode;	// 0-auto,720,1080
@@ -323,7 +324,10 @@ typedef struct {
 	int hdmi_init;	
 	int (*cypher_func)(void *arg);
 	unsigned int hdmi_bksv[2];
-	char *hdmi_cp_key;
+	char *hdmi_cp_p;
+	int hdmi_3d_type;
+	unsigned int hdmi_pixel_clock;
+	int hdmi_certify_flag;
 
 	// govrh
 	int govrh_field;
@@ -409,6 +413,7 @@ typedef struct {
 	// debug
 	int dbg_msg_level;			// debug message level
 	int govw_fb_cnt;			// debug for disable GOVW TG after show how many govw fb
+	int dbg_flag;
 
 	// hw interrupt	
 	int govw_vbis_cnt;			// count for GOVW VBIS interrupt
@@ -507,37 +512,37 @@ const vpp_timing_t vpp_video_mode_table[] = {
 	},
 	{	/* 720x480p@60 CEA861 */
 	27027060,				/* pixel clock */				
-	VPP_OPT_FPS_VAL(60)+VPP_OPT_HDMI_VIC_VAL(HDMI_720x480p60_16x9),	/* option */
+	VPP_OPT_FPS_VAL(60)+VPP_OPT_HDMI_VIC_VAL(HDMI_720x480p60_4x3),	/* option */
 	62, 60, 720, 16,		/* H sync, bp, pixel, fp */
 	6, 30, 480, 9			/* V sync, bp, line, fp */
 	},
 	{	/* 720x480i@60 CEA861 */ /* Twin mode */
 	27000000,				/* pixel clock */
-	VPP_OPT_FPS_VAL(60)+VPP_OPT_HDMI_VIC_VAL(HDMI_1440x480i60_16x9)+VPP_OPT_INTERLACE+VPP_OPT_HSCALE_UP,		/* option */
+	VPP_OPT_FPS_VAL(60)+VPP_OPT_HDMI_VIC_VAL(HDMI_1440x480i60_4x3)+VPP_OPT_INTERLACE+VPP_OPT_HSCALE_UP,		/* option */
 	124, 114, 720, 38,		/* H sync, bp, pixel, fp */
 	3, 15, 240, 4			/* V sync, bp, line, fp */
 	},
 	{	/* 720x480i@60 CEA861 */
 	27000000,				/* pixel clock */
-	VPP_OPT_FPS_VAL(60)+VPP_OPT_HDMI_VIC_VAL(HDMI_1440x480i60_16x9)+VPP_OPT_INTERLACE+VPP_OPT_HSCALE_UP,		/* option */
+	VPP_OPT_FPS_VAL(60)+VPP_OPT_HDMI_VIC_VAL(HDMI_1440x480i60_4x3)+VPP_OPT_INTERLACE+VPP_OPT_HSCALE_UP,		/* option */
 	124, 114, 720, 38,		/* H sync, bp, pixel, fp */
 	3, 16, 240, 4			/* V sync, bp, line, fp */
 	},
 	{	/* 720x576p@50 CEA861 */
 	27000000,				/* pixel clock */				
-	VPP_OPT_FPS_VAL(50)+VPP_OPT_HDMI_VIC_VAL(HDMI_720x576p50_16x9),						/* option */
+	VPP_OPT_FPS_VAL(50)+VPP_OPT_HDMI_VIC_VAL(HDMI_720x576p50_4x3),						/* option */
 	64, 68, 720, 12,		/* H sync, bp, pixel, fp */
 	5, 39, 576, 5			/* V sync, bp, line, fp */
 	},
 	{	/* 720x576i@50  */ /* Twin mode */
 	27000050,				/* pixel clock */
-	VPP_OPT_FPS_VAL(50)+VPP_OPT_HDMI_VIC_VAL(HDMI_1440x576i50_16x9)+VPP_OPT_INTERLACE+VPP_OPT_HSCALE_UP,		/* option */
+	VPP_OPT_FPS_VAL(50)+VPP_OPT_HDMI_VIC_VAL(HDMI_1440x576i50_4x3)+VPP_OPT_INTERLACE+VPP_OPT_HSCALE_UP,		/* option */
 	126, 138, 720, 24,		/* H sync, bp, pixel, fp */
 	3, 19, 288, 2			/* V sync, bp, line, fp */
 	},
 	{	/* 720x576i@50 CEA861 */
 	27000050,				/* pixel clock */
-	VPP_OPT_FPS_VAL(50)+VPP_OPT_HDMI_VIC_VAL(HDMI_1440x576i50_16x9)+VPP_OPT_INTERLACE+VPP_OPT_HSCALE_UP,		/* option */
+	VPP_OPT_FPS_VAL(50)+VPP_OPT_HDMI_VIC_VAL(HDMI_1440x576i50_4x3)+VPP_OPT_INTERLACE+VPP_OPT_HSCALE_UP,		/* option */
 	126, 138, 720, 24,		/* H sync, bp, pixel, fp */
 	3, 20, 288, 2			/* V sync, bp, line, fp */
 	},
@@ -781,6 +786,30 @@ const vpp_timing_t vpp_video_mode_table[] = {
 	44, 148, 1920, 88,		/* H sync, bp, pixel, fp */
 	5, 36, 1080, 4			/* V sync, bp, line, fp */
 	},
+	{	/* 1920x1080i@60  */ /* Twin mode */
+	74250060,				/* pixel clock */
+	VPP_OPT_FPS_VAL(60)+VPP_OPT_HDMI_VIC_VAL(HDMI_1920x1080i60_16x9)+VPP_OPT_INTERLACE+VPP_VGA_HSYNC_POLAR_HI+VPP_VGA_VSYNC_POLAR_HI,	/* option */
+	44, 148, 1920, 88,		/* H sync, bp, pixel, fp */
+	5, 15, 540, 2			/* V sync, bp, line, fp */
+	},
+	{	/* 1920x1080i@60 CEA861 */
+	74250060,				/* pixel clock */
+	VPP_OPT_FPS_VAL(60)+VPP_OPT_HDMI_VIC_VAL(HDMI_1920x1080i60_16x9)+VPP_OPT_INTERLACE+VPP_VGA_HSYNC_POLAR_HI+VPP_VGA_VSYNC_POLAR_HI,	/* option */
+	44, 148, 1920, 88,		/* H sync, bp, pixel, fp */
+	5, 16, 540, 2			/* V sync, bp, line, fp */
+	},
+	{	/* 1920x1080i@50  */ /* Twin mode */
+	74250050,				/* pixel clock */
+	VPP_OPT_FPS_VAL(50)+VPP_OPT_HDMI_VIC_VAL(HDMI_1920x1080i50_16x9)+VPP_OPT_INTERLACE+VPP_VGA_HSYNC_POLAR_HI+VPP_VGA_VSYNC_POLAR_HI,	/* option */
+	44, 148, 1920, 528,		/* H sync, bp, pixel, fp */
+	5, 15, 540, 2			/* V sync, bp, line, fp */
+	},
+	{	/* 1920x1080i@50 CEA861 */
+	74250050,				/* pixel clock */
+	VPP_OPT_FPS_VAL(50)+VPP_OPT_HDMI_VIC_VAL(HDMI_1920x1080i50_16x9)+VPP_OPT_INTERLACE+VPP_VGA_HSYNC_POLAR_HI+VPP_VGA_VSYNC_POLAR_HI,	/* option */
+	44, 148, 1920, 528,		/* H sync, bp, pixel, fp */
+	5, 16, 540, 2			/* V sync, bp, line, fp */
+	},
 	{	/* 1920x1080p@25 CEA861 */
 	74250025,				/* pixel clock */
 	VPP_OPT_FPS_VAL(25)+VPP_OPT_HDMI_VIC_VAL(HDMI_1920x1080p25_16x9)+VPP_VGA_HSYNC_POLAR_HI+VPP_VGA_VSYNC_POLAR_HI,	/* option */
@@ -798,30 +827,6 @@ const vpp_timing_t vpp_video_mode_table[] = {
 	VPP_OPT_FPS_VAL(50)+VPP_OPT_HDMI_VIC_VAL(HDMI_1920x1080p50_16x9)+VPP_VGA_HSYNC_POLAR_HI+VPP_VGA_VSYNC_POLAR_HI,	/* option */
 	44, 148, 1920, 528,		/* H sync, bp, pixel, fp */
 	5, 36, 1080, 4			/* V sync, bp, line, fp */
-	},
-	{	/* 1920x1080i@50  */ /* Twin mode */
-	74250050,				/* pixel clock */
-	VPP_OPT_FPS_VAL(50)+VPP_OPT_HDMI_VIC_VAL(HDMI_1920x1080i50_16x9)+VPP_OPT_INTERLACE+VPP_VGA_HSYNC_POLAR_HI+VPP_VGA_VSYNC_POLAR_HI,	/* option */
-	44, 148, 1920, 528,		/* H sync, bp, pixel, fp */
-	5, 15, 540, 2			/* V sync, bp, line, fp */
-	},
-	{	/* 1920x1080i@50 CEA861 */
-	74250050,				/* pixel clock */
-	VPP_OPT_FPS_VAL(50)+VPP_OPT_HDMI_VIC_VAL(HDMI_1920x1080i50_16x9)+VPP_OPT_INTERLACE+VPP_VGA_HSYNC_POLAR_HI+VPP_VGA_VSYNC_POLAR_HI,	/* option */
-	44, 148, 1920, 528,		/* H sync, bp, pixel, fp */
-	5, 16, 540, 2			/* V sync, bp, line, fp */
-	},
-	{	/* 1920x1080i@60  */ /* Twin mode */
-	74250060,				/* pixel clock */
-	VPP_OPT_FPS_VAL(60)+VPP_OPT_HDMI_VIC_VAL(HDMI_1920x1080i60_16x9)+VPP_OPT_INTERLACE+VPP_VGA_HSYNC_POLAR_HI+VPP_VGA_VSYNC_POLAR_HI,	/* option */
-	44, 148, 1920, 88,		/* H sync, bp, pixel, fp */
-	5, 15, 540, 2			/* V sync, bp, line, fp */
-	},
-	{	/* 1920x1080i@60 CEA861 */
-	74250060,				/* pixel clock */
-	VPP_OPT_FPS_VAL(60)+VPP_OPT_HDMI_VIC_VAL(HDMI_1920x1080i60_16x9)+VPP_OPT_INTERLACE+VPP_VGA_HSYNC_POLAR_HI+VPP_VGA_VSYNC_POLAR_HI,	/* option */
-	44, 148, 1920, 88,		/* H sync, bp, pixel, fp */
-	5, 16, 540, 2			/* V sync, bp, line, fp */
 	},
 	{	/* 1920x1200p@60+R DMT/CVT */
 	154000000,				/* pixel clock */
@@ -906,7 +911,7 @@ EXTERN vpp_csc_t vpp_check_csc_mode(vpp_csc_t mode,vdo_color_fmt src_fmt,vdo_col
 EXTERN void vpp_trans_timing(vpp_mod_t mod,vpp_timing_t *tmr,vpp_clock_t *hw_tmr,int to_hw);
 EXTERN void vpp_fill_pattern(vpp_mod_t mod,int no,int arg);
 EXTERN unsigned int vpp_get_vmode_pixel_clock(unsigned int resx,unsigned int resy,unsigned int fps);
-EXTERN vpp_timing_t *vpp_get_video_mode(unsigned int resx,unsigned int resy,unsigned int pixel_clock);
+EXTERN vpp_timing_t *vpp_get_video_mode(unsigned int resx,unsigned int resy,unsigned int pixel_clock,int *index);
 EXTERN vpp_timing_t *vpp_get_video_mode_ext(unsigned int resx,unsigned int resy,unsigned int pixel_clock,unsigned int option);
 EXTERN void vpp_set_video_mode(unsigned int resx,unsigned int resy,unsigned int pixel_clock);
 EXTERN void vpp_set_video_quality(int mode);
@@ -936,6 +941,7 @@ EXTERN void vpp_backup_reg2(unsigned int addr,unsigned int size,unsigned int *pt
 EXTERN void vpp_restore_reg2(unsigned int addr,unsigned int size,unsigned int *reg_ptr);
 EXTERN int vpp_pan_display(struct fb_var_screeninfo *var, struct fb_info *info,int enable);
 EXTERN void vpp_set_vout_enable_timer(void);
+EXTERN void vpp_netlink_notify(int no,int cmd,int arg);
 #endif
 
 EXTERN void vpp_reg_dump(unsigned int addr,int size);

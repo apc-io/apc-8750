@@ -30,9 +30,17 @@
 #include "vpp-osif.h"
 #include "sw_i2c.h"
 
-#define   SPEED			5000000
+//#define   SPEED			5000000
+#define   SPEED			50
 
 #define delay_time 30
+
+typedef struct {
+	unsigned int gpio_en;
+	unsigned int out_en;
+	unsigned int data_out;
+	unsigned int pull_en;
+} swi2c_reg_bk_t;
 
 #ifdef __KERNEL__
 spinlock_t swi2c_irqlock = SPIN_LOCK_UNLOCKED;
@@ -243,13 +251,13 @@ int wmt_swi2c_tx(
 	
 	wmt_swi2c_lock(1);
 
-	ret |= wmt_swi2c_StartI2C();
-    ret |= wmt_swi2c_WriteAck(addr);
+	if( (ret |= wmt_swi2c_StartI2C()) ) goto tx_end;
+    if( (ret |= wmt_swi2c_WriteAck(addr)) ) goto tx_end;
     for (i = 0; i < cnt; i++){
-         ret |= wmt_swi2c_WriteAck(buf[i]);
+         if( (ret |= wmt_swi2c_WriteAck(buf[i])) ) goto tx_end;
     }
     ret |= wmt_swi2c_StopI2C();
-
+tx_end:
 	wmt_swi2c_lock(0);
     return ret;
 }
@@ -266,15 +274,31 @@ int wmt_swi2c_rx(
 
 	wmt_swi2c_lock(1);
 
-	ret |= wmt_swi2c_StartI2C();
-    ret |= wmt_swi2c_WriteAck(addr | 0x01);
+	if( (ret |= wmt_swi2c_StartI2C()) ) goto rx_end;
+    if( (ret |= wmt_swi2c_WriteAck(addr | 0x01)) ) goto rx_end;
     for(i=0;i<cnt;i++){
-		ret |= wmt_swi2c_ReadAck((unsigned char *)&buf[i],(i==(cnt-1)));
+		if( (ret |= wmt_swi2c_ReadAck((unsigned char *)&buf[i],(i==(cnt-1)))) ) goto rx_end;
     }
     ret |= wmt_swi2c_StopI2C();
-    
+rx_end:    
 	wmt_swi2c_lock(0);
     return ret;
+}
+
+void wmt_swi2c_reg_bk(swi2c_reg_t *reg_p,swi2c_reg_bk_t *reg_bk,int bk)
+{
+	if( bk ){
+		reg_bk->gpio_en = REG16_VAL(reg_p->gpio_en);
+		reg_bk->out_en = REG16_VAL(reg_p->out_en);
+		reg_bk->data_out = REG16_VAL(reg_p->data_out);
+		reg_bk->pull_en = REG16_VAL(reg_p->pull_en);
+	}
+	else {
+		REG16_VAL(reg_p->gpio_en) = reg_bk->gpio_en;
+		REG16_VAL(reg_p->out_en) = reg_bk->out_en;
+		REG16_VAL(reg_p->data_out) = reg_bk->data_out;
+		REG16_VAL(reg_p->pull_en) = reg_bk->pull_en;
+	}
 }
 
 int wmt_swi2c_read(
@@ -288,24 +312,28 @@ int wmt_swi2c_read(
     int ret = 0;
     char buffer[24];
     int temp = 0;
+	swi2c_reg_bk_t scl_bk,sda_bk;
 
 	swi2c_scl = handle->scl_reg;
 	swi2c_sda = handle->sda_reg;
+
+	wmt_swi2c_reg_bk(swi2c_scl,&scl_bk,1);
+	wmt_swi2c_reg_bk(swi2c_sda,&sda_bk,1);
 	
 	buffer[0] = index;
     ret = wmt_swi2c_tx(addr, buffer, 1, &temp);
     if (ret){
-		printk("[SWI2C] *E* tx fail\n");
+		DPRINT("[SWI2C] *E* tx fail\n");
     	goto exit;
     }
     ret = wmt_swi2c_rx(addr, buf, cnt, &temp);
     if (ret){
-		printk("[SWI2C] *E* rx fail\n");
+		DPRINT("[SWI2C] *E* rx fail\n");
     	goto exit;
     }
 exit:
-	REG16_VAL(swi2c_scl->gpio_en) &= ~swi2c_scl->bit_mask;
-	REG16_VAL(swi2c_sda->gpio_en) &= ~swi2c_sda->bit_mask;
+	wmt_swi2c_reg_bk(swi2c_scl,&scl_bk,0);
+	wmt_swi2c_reg_bk(swi2c_sda,&sda_bk,0);
 	return ret;
 }
 EXPORT_SYMBOL(wmt_swi2c_read);
@@ -321,21 +349,66 @@ int wmt_swi2c_write(
     int ret = 0;
     char buffer[24];
     int temp;
- 
-    swi2c_scl = handle->scl_reg;
-    swi2c_sda = handle->sda_reg;
+	swi2c_reg_bk_t scl_bk,sda_bk;
 
+	swi2c_scl = handle->scl_reg;
+	swi2c_sda = handle->sda_reg;
+
+	wmt_swi2c_reg_bk(swi2c_scl,&scl_bk,1);
+	wmt_swi2c_reg_bk(swi2c_sda,&sda_bk,1);
+	
     buffer[0] = index;
     buffer[1] = *buf;
     ret = wmt_swi2c_tx(addr, buffer, cnt, &temp);
     if (ret) {
-	   	printk("[SWI2C] *E* tx fail\n");
+	   	DPRINT("[SWI2C] *E* tx fail\n");
     	goto exit;
     }
 exit:
-	REG16_VAL(swi2c_scl->gpio_en) &= ~swi2c_scl->bit_mask;
-	REG16_VAL(swi2c_sda->gpio_en) &= ~swi2c_sda->bit_mask;
+	wmt_swi2c_reg_bk(swi2c_scl,&scl_bk,0);
+	wmt_swi2c_reg_bk(swi2c_sda,&sda_bk,0);
 	return ret;
 }
 EXPORT_SYMBOL(wmt_swi2c_write);
+
+int wmt_swi2c_check(swi2c_handle_t *handle)
+{
+	int ret = 0;
+#if 0
+	swi2c_reg_t *reg_p;
+	swi2c_reg_bk_t scl_bk,sda_bk;
+
+	swi2c_scl = handle->scl_reg;
+	swi2c_sda = handle->sda_reg;
+
+	wmt_swi2c_reg_bk(swi2c_scl,&scl_bk,1);
+	wmt_swi2c_reg_bk(swi2c_sda,&sda_bk,1);
+	reg_p = handle->scl_reg;
+	do {	
+		REG16_VAL(reg_p->gpio_en) |= reg_p->bit_mask;
+		REG16_VAL(reg_p->out_en) |= reg_p->bit_mask;
+		REG16_VAL(reg_p->data_out) &= ~reg_p->bit_mask;
+		
+		REG16_VAL(reg_p->out_en) &= ~reg_p->bit_mask;
+		if( reg_p->pull_en )
+			REG16_VAL(reg_p->pull_en) &=~ reg_p->pull_en_bit_mask;
+		if(*(volatile unsigned short *)(reg_p->data_in) & reg_p->bit_mask){
+			if( reg_p == handle->sda_reg ){
+				break;
+			}
+			reg_p = handle->sda_reg;
+		}
+		else {
+			ret = 1;
+			break;
+		}
+	} while(1);
+	wmt_swi2c_reg_bk(swi2c_scl,&scl_bk,0);
+	wmt_swi2c_reg_bk(swi2c_sda,&sda_bk,0);
+	if( ret )
+		DPRINT("[SWI2C] %s exist\n",(ret)? "not":"");
+#endif
+	return ret;
+}
+EXPORT_SYMBOL(wmt_swi2c_check);
   

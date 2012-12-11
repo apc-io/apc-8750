@@ -167,6 +167,14 @@ config XEN_KBDDEV_FRONTEND
 	  keyboard and mouse device driver.  It communicates with a back-end
 	  in another domain.
 
+config INPUT_GPIO
+	tristate "Gpio input device"
+	---help---
+	  Say Y here if you want to use gpio input device when some keys are pressed;
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called keyreset.
+
 comment "Input Device Drivers"
 
 source "drivers/input/keyboard/Kconfig"

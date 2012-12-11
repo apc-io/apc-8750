@@ -26,6 +26,35 @@
 #include <net.h>
 #include <miiphy.h>
 
+void eth_parse_enetaddr(const char *addr, uchar *enetaddr)
+{
+	char *end;
+	int i;
+
+	for (i = 0; i < 6; ++i) {
+		enetaddr[i] = addr ? simple_strtoul(addr, &end, 16) : 0;
+		if (addr)
+			addr = (*end) ? end + 1 : end;
+	}
+}
+
+int eth_getenv_enetaddr(char *name, uchar *enetaddr)
+{
+	eth_parse_enetaddr(getenv(name), enetaddr);
+	return is_valid_ether_addr(enetaddr);
+}
+/*
+int eth_setenv_enetaddr(char *name, const uchar *enetaddr)
+{
+	char buf[20];
+
+	sprintf(buf, "%pM", enetaddr);
+
+	return setenv(name, buf);
+}
+*/
+
+
 #if (CONFIG_COMMANDS & CFG_CMD_NET) && defined(CONFIG_NET_MULTI)
 
 #ifdef CFG_GT_6426x
@@ -36,6 +65,23 @@ extern int au1x00_enet_initialize(bd_t *);
 extern int dc21x4x_initialize(bd_t *);
 extern int e1000_initialize(bd_t *);
 extern int eepro100_initialize(bd_t *);
+
+int eth_getenv_enetaddr_by_index(const char *base_name, int index,
+				 uchar *enetaddr)
+{
+
+	char enetvar[32];
+	sprintf(enetvar, index ? "%s%daddr" : "%saddr", base_name, index);
+	return eth_getenv_enetaddr(enetvar, enetaddr);
+}
+static int eth_mac_skip(int index)
+{
+
+	char enetvar[15];
+	char *skip_state;
+	sprintf(enetvar, index ? "eth%dmacskip" : "ethmacskip", index);
+	return ((skip_state = getenv(enetvar)) != NULL);
+}
 extern int eth_3com_initialize(bd_t *);
 extern int fec_initialize(bd_t *);
 extern int inca_switch_initialize(bd_t *);
@@ -58,6 +104,7 @@ static struct eth_device *eth_devices, *eth_current;
 
 struct eth_device *eth_get_dev(void)
 {
+
 	return eth_current;
 }
 
@@ -81,6 +128,27 @@ struct eth_device *eth_get_dev_by_name(char *devname)
 	return target_dev;
 }
 
+struct eth_device *eth_get_dev_by_index(int index)
+{
+	struct eth_device *dev, *target_dev;
+	int idx = 0;
+
+	if (!eth_devices)
+		return NULL;
+
+	dev = eth_devices;
+	target_dev = NULL;
+	do {
+		if (idx == index) {
+			target_dev = dev;
+			break;
+		}
+		dev = dev->next;
+		idx++;
+	} while (dev != eth_devices);
+
+	return target_dev;
+}
 int eth_get_dev_index(void)
 {
 	struct eth_device *dev;
@@ -101,22 +169,79 @@ int eth_get_dev_index(void)
 	return 0;
 }
 
-int eth_register(struct eth_device *dev)
+static void eth_current_changed(void)
 {
-	struct eth_device *d;
-
-	if (!eth_devices) {
-		eth_current = eth_devices = dev;
 #ifdef CONFIG_NET_MULTI
+
+	{
+		char *act = getenv("ethact");
 		/* update current ethernet name */
+		if (eth_current)
 		{
-			char *act = getenv("ethact");
 			if (act == NULL || strcmp(act, eth_current->name) != 0)
 				setenv("ethact", eth_current->name);
 		}
+		/*
+		 * remove the variable completely if there is no active
+		 * interface
+		 */
+		else if (act != NULL)
+			setenv("ethact", NULL);
+	}
 #endif
+}
+
+int eth_write_hwaddr(struct eth_device *dev, const char *base_name,
+		   int eth_number)
+{
+	unsigned char env_enetaddr[6];
+	int ret = 0;
+
+	if (!eth_getenv_enetaddr_by_index(base_name, eth_number, env_enetaddr))
+		return -1;
+	printf("%s:1\n",__FUNCTION__);
+
+	if (memcmp(env_enetaddr, "\0\0\0\0\0\0", 6)) {
+		if (memcmp(dev->enetaddr, "\0\0\0\0\0\0", 6) &&
+			memcmp(dev->enetaddr, env_enetaddr, 6)) {
+			printf("\nWarning: %s MAC addresses don't match:\n",
+				dev->name);
+			printf("Address in SROM is         %pM\n",
+				dev->enetaddr);
+			printf("Address in environment is  %pM\n",
+				env_enetaddr);
+		}
+
+		memcpy(dev->enetaddr, env_enetaddr, 6);
+	}
+
+	if (dev->write_hwaddr &&
+		!eth_mac_skip(eth_number) &&
+		is_valid_ether_addr(dev->enetaddr)) {
+		ret = dev->write_hwaddr(dev);
+	}
+
+	return ret;
+}
+
+int eth_register(struct eth_device *dev)
+{
+	struct eth_device *d;
+	eth_devices = NULL;
+	eth_current = NULL;
+
+	size_t len = strlen(dev->name);
+	if (len >= NAMESIZE) {
+		printf("Network driver name is too long (%zu >= %zu): %s\n",
+						len, NAMESIZE, dev->name);
+		return -1;
+	}
+
+	if (!eth_devices) {
+		eth_current = eth_devices = dev;
+		eth_current_changed();
 	} else {
-		for (d = eth_devices; d->next != eth_devices; d = d->next)
+		for (d=eth_devices; d->next!=eth_devices; d=d->next)
 			;
 		d->next = dev;
 	}
@@ -332,33 +457,52 @@ void eth_set_enetaddr(int num, char *addr)
 
 	memcpy(dev->enetaddr, enetaddr, 6);
 }
+#ifndef CONFIG_DRIVER_ETHER
 
 int eth_init(bd_t *bis)
 {
-	struct eth_device *old_current;
+	int eth_number;
+	struct eth_device *old_current, *dev;
 
-	if (!eth_current)
-		return 0;
+	if (!eth_current) {
+		puts ("No ethernet found.\n");
+		return -1;
+	}
+
+	/* Sync environment with network devices */
+	eth_number = 0;
+	dev = eth_devices;
+	do {
+		uchar env_enetaddr[6];
+
+		if (eth_getenv_enetaddr_by_index("eth", eth_number,
+						 env_enetaddr))
+			memcpy(dev->enetaddr, env_enetaddr, 6);
+
+		++eth_number;
+		dev = dev->next;
+	} while (dev != eth_devices);
 
 	old_current = eth_current;
 	do {
 		debug("Trying %s\n", eth_current->name);
 
-		if (eth_current->init(eth_current, bis)) {
+		if (eth_current->init(eth_current,bis) >= 0) {
 			eth_current->state = ETH_STATE_ACTIVE;
 
-			return 1;
+			return 0;
 		}
 		debug("FAIL\n");
 
 		eth_try_another(0);
 	} while (old_current != eth_current);
 
-	return 0;
+	return -1;
 }
 
 void eth_halt(void)
 {
+
 	if (!eth_current)
 		return;
 
@@ -369,6 +513,7 @@ void eth_halt(void)
 
 int eth_send(volatile void *packet, int length)
 {
+
 	if (!eth_current)
 		return -1;
 
@@ -377,38 +522,43 @@ int eth_send(volatile void *packet, int length)
 
 int eth_rx(void)
 {
+
 	if (!eth_current)
 		return -1;
 
 	return eth_current->recv(eth_current);
 }
 
+#endif
 void eth_try_another(int first_restart)
 {
-	static struct eth_device *first_failed;
+	static struct eth_device *first_failed = NULL;
+	char *ethrotate;
+
+	/*
+	 * Do not rotate between network interfaces when
+	 * 'ethrotate' variable is set to 'no'.
+	 */
+	if (((ethrotate = getenv ("ethrotate")) != NULL) &&
+	    (strcmp(ethrotate, "no") == 0))
+		return;
 
 	if (!eth_current)
 		return;
 
-	if (first_restart)
+	if (first_restart) {
 		first_failed = eth_current;
+	}
 
 	eth_current = eth_current->next;
 
-#ifdef CONFIG_NET_MULTI
-	/* update current ethernet name */
-	{
-		char *act = getenv("ethact");
-		if (act == NULL || strcmp(act, eth_current->name) != 0)
-			setenv("ethact", eth_current->name);
-	}
-#endif
+	eth_current_changed();
 
-	if (first_failed == eth_current)
+	if (first_failed == eth_current) {
 		NetRestartWrap = 1;
+	}
 }
 
-#ifdef CONFIG_NET_MULTI
 void eth_set_current(void)
 {
 	char *act;
@@ -429,11 +579,11 @@ void eth_set_current(void)
 
 	setenv("ethact", eth_current->name);
 }
-#endif
 
-char *eth_get_name(void)
+char *eth_get_name (void)
 {
-	return eth_current ? eth_current->name : "unknown";
+
+	return (eth_current ? eth_current->name : "unknown");
 }
 #elif (CONFIG_COMMANDS & CFG_CMD_NET) && !defined(CONFIG_NET_MULTI)
 

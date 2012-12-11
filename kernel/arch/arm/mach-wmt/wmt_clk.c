@@ -921,14 +921,14 @@ int wmt_power_dev(enum dev_id dev, enum power_cmd cmd)
 		base = (unsigned int)ioremap/*_nocache*/(LOADER_ADDR, 0x10000);
 	exec_at = base + (DO_POWER_SET - LOADER_ADDR);
 	theKernel_power = (int (*)(int from, enum dev_id dev, enum power_cmd cmd))exec_at;
-	temp = *(volatile unsigned int *)(0xFE110110);
-	/*printk(KERN_INFO"entry exec_at=0x%x chip_id=0x%x, clock enable=0x%x\n", exec_at,
+	/*temp = *(volatile unsigned int *)(0xFE110110);
+	printk(KERN_INFO"entry exec_at=0x%x chip_id=0x%x, clock enable=0x%x\n", exec_at,
 	((temp >> 10)&0xC0)|(temp&0x3F), *(volatile unsigned int *)(0xFE130250));*/
 	/*backup flags and disable irq*/
 	local_irq_save(flags);
 
 	/*enable subpage AP bits*/
-	asm volatile ("mrc p15, 0, %0, c1, c0, 0" : : "r" (temp));
+	asm volatile ("mrc p15, 0, %0, c1, c0, 0" : "=r" (temp));
 	/*printk(KERN_INFO"1 xp(23) bits =0x%x \n", temp&(1<<CP15_C1_XPbit));*/
 	if (temp & (1<<CP15_C1_XPbit)) {
 		rc = 1;
@@ -940,7 +940,7 @@ int wmt_power_dev(enum dev_id dev, enum power_cmd cmd)
 
 	if (rc == 1) {
 		/*disable subpage AP bits*/
-		asm volatile ("mrc p15, 0, %0, c1, c0, 0" : : "r" (temp));
+		asm volatile ("mrc p15, 0, %0, c1, c0, 0" : "=r" (temp));
 		/*printk(KERN_INFO"3 xp(23) bits =0x%x \n", temp&(1<<CP15_C1_XPbit));*/
 		temp |= (1<<CP15_C1_XPbit);
 		/*printk(KERN_INFO"4 xp(23) bits =0x%x \n", temp&(1<<CP15_C1_XPbit));*/

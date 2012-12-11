@@ -95,7 +95,7 @@
 #define CONFIG_DOS_PARTITION  1  
 /*default ehci driver */
 #define CONFIG_USB_EHCI		1
-#define CONFIG_USB_UHCI		1   
+#define CONFIG_USB_UHCI		1
 
 #define CONFIG_MMC 1
 
@@ -113,7 +113,18 @@
 /*
  * Hardware drivers
  */
-#define CONFIG_DRIVER_ETHER			/* Using WMT MAC */
+#define CONFIG_USB_ETHER_ASIX   1
+#define CONFIG_CMD_NET 		 1
+#define CONFIG_CMD_PING 		 1  
+#define CONFIG_CMD_DHCP            1
+
+#ifdef CONFIG_DRIVER_ETHER
+#undef CONFIG_NET_MULTI 				/* Using WMT MAC */
+#undef CONFIG_USB_HOST_ETHER  
+#else    								
+#define CONFIG_USB_HOST_ETHER  1 	/* Using usb ethernet adapter */
+#define CONFIG_NET_MULTI 		 1
+#endif
 
 #define CONFIG_ETHADDR    00:40:63:00:00:00
 #define CONFIG_NETMASK    255.255.255.0	/* talk on MY local net */

@@ -24,4 +24,7 @@ obj-$(CONFIG_FB_WMT_GE) += ge/
 # wmt vpu fb
 obj-$(CONFIG_FB_WMT) += fb-vpu.o
 
+# wmt vpu fb
+obj-$(CONFIG_WMT_MB) += wmt-mb.o
+
 obj-$(CONFIG_LOGO_WMT_ANIMATION) += bootanimation/

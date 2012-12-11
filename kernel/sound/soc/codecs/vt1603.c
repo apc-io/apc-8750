@@ -82,10 +82,6 @@ struct vt1603_conf_struct {
 };
 static struct vt1603_conf_struct vt1603_conf;
 
-/* check fm34 */
-static int fm34_enable  = 0;
-static int fm34_i2c_bus = 0;
-
 /* when wmt.vt1603.debug is set, enable regs dump */
 #define VT1603_DBG_INTERVAL (10 * 1000 / POLL_PERIOD) // interval=10s
 static int vt1603_dbg_flag = 0;
@@ -340,14 +336,20 @@ static int vt1603_reset(struct snd_soc_codec *codec)
 static int vt1603_hp_power_up(struct snd_soc_codec *codec)
 {
 	u16 reg;
-	
+
+	/* disable mono mixing */
 	reg = snd_soc_read(codec, VT1603_R0d);
 	reg &= ~BIT4;
-	snd_soc_write(codec, VT1603_R0d, reg); 
+	snd_soc_write(codec, VT1603_R0d, reg);
+
+	/* make sure DAC R channel is enable */
+	reg = snd_soc_read(codec, VT1603_R62);
+	reg |= BIT4;
+	snd_soc_write(codec, VT1603_R62, reg);
 	
 	// set HP power up
 	reg = snd_soc_read(codec, VT1603_R68);
-	reg &= ~BIT4; // HP power up
+	reg &= ~BIT4;
 	snd_soc_write(codec, VT1603_R68, reg);
 	
 	return 0;
@@ -356,17 +358,18 @@ static int vt1603_hp_power_up(struct snd_soc_codec *codec)
 static int vt1603_classd_power_up(struct snd_soc_codec *codec)
 {
 	u16 reg;
-				
+
 	if (vt1603_conf.stereo_or_mono) {
+		/* enable mono mixing */
 		reg = snd_soc_read(codec, VT1603_R0d);
 		reg |= BIT4;
 		snd_soc_write(codec, VT1603_R0d, reg);
-	} 
-	else {
-		reg = snd_soc_read(codec, VT1603_R0d);
+
+		/* disable DAC R channel */
+		reg = snd_soc_read(codec, VT1603_R62);
 		reg &= ~BIT4;
-		snd_soc_write(codec, VT1603_R0d, reg); 
-	}
+		snd_soc_write(codec, VT1603_R62, reg);
+	} 
 	
 	// set class-d power up
 	reg = snd_soc_read(codec, VT1603_R25);
@@ -694,19 +697,10 @@ static int vt1603_set_default_volume(struct snd_soc_codec *codec)
 	snd_soc_write(codec, VT1603_R64, 0xa1);
 	snd_soc_write(codec, VT1603_R65, 0xa1);
 
-	// if fm34 is enable, decrease the capture gain, otherwise appear 
-	// echo sound
-	if (fm34_enable) {
-		// set ADC gain to be 0x43
-		snd_soc_write(codec, VT1603_R01, 0x43);
-		snd_soc_write(codec, VT1603_R02, 0x43);
-	}
-	else {
-		/* original: set ADC Digital Gain to 12.5dB, 0x70 */
-		/* set ADC Digital Gain to 20dB, 0x7f */
-		snd_soc_write(codec, VT1603_R01, 0x7f);
-		snd_soc_write(codec, VT1603_R02, 0x7f);
-	}
+	/* original: set ADC Digital Gain to 12.5dB, 0x70 */
+	/* set ADC Digital Gain to 20dB, 0x7f */
+	snd_soc_write(codec, VT1603_R01, 0x7f);
+	snd_soc_write(codec, VT1603_R02, 0x7f);
 
 	// set ADC gain update, enable ADCDAT output, Hi-Fi mode
 	/*reg = snd_soc_read(codec, VT1603_R00);
@@ -1572,18 +1566,6 @@ static void vt1603_configure(void)
 	ret = wmt_getsyspara("wmt.vt1603.debug", buf, &varlen);
 	if (ret == 0) {
 		sscanf(buf, "%d", &vt1603_dbg_flag);
-	}
-
-	// has fm34 for echo cancellation?
-	memset(buf, 0x0, sizeof(buf));
-	varlen = sizeof(buf);
-	ret = wmt_getsyspara("wmt.audio.fm34", buf, &varlen);
-	if (ret == 0) {
-		sscanf(buf, "%d:%d", &fm34_enable, &fm34_i2c_bus);
-		if (fm34_enable != 0)
-			fm34_enable = 1;
-		if (fm34_i2c_bus != 0)
-			fm34_i2c_bus = 1;
 	}
 }
 

@@ -81,7 +81,7 @@ static int hwdac_pcm_hw_params(struct snd_pcm_substream *substream,
 		SNDRV_PCM_RATE_44100 | SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 | \
 		SNDRV_PCM_RATE_96000)
 
-#define HWDEC_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
+#define HWDAC_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 	SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_U8 | SNDRV_PCM_FMTBIT_FLOAT)
 
 static struct snd_soc_dai_ops hwdac_dai_ops = {
@@ -89,13 +89,13 @@ static struct snd_soc_dai_ops hwdac_dai_ops = {
 };
 
 struct snd_soc_dai hwdac_dai = {
-	.name = "HWDEC",
+	.name = "HWDAC",
 	.playback = {
 		.stream_name = "Playback",
 		.channels_min = 1,
-		.channels_max = 2,
+		.channels_max = 6,
 		.rates = HWDAC_RATES,
-		.formats = HWDEC_FORMATS,},
+		.formats = HWDAC_FORMATS,},
 	.ops = &hwdac_dai_ops,
 };
 EXPORT_SYMBOL_GPL(hwdac_dai);

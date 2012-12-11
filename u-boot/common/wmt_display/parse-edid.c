@@ -31,7 +31,7 @@
 #define PARSE_EDID_C
 // #define DEBUG
 
-#include "vpp-osif.h"
+#include "vpp.h"
 #include "edid.h"
 #include "hdmi.h"
 
@@ -193,12 +193,37 @@ static int parse_timing_description( unsigned char* dtd )
 
 	{
 		int i;
+		vpp_timing_t *t;
+		
 		for(i=0;i<4;i++){
-			if( edid_info.detail_timing[i].resx == 0 ){
-				edid_info.detail_timing[i].resx = H_ACTIVE;
-				edid_info.detail_timing[i].resy = V_ACTIVE;
-				edid_info.detail_timing[i].freq = PIXEL_CLOCK/(vtotal*htotal);
-				edid_info.detail_timing[i].freq |= INTERLACED? EDID_TMR_INTERLACE:0;
+			t = &edid_info.detail_timing[i];
+			if( t->pixel_clock == 0 ){
+				int fps;
+
+				t->pixel_clock = PIXEL_CLOCK;
+
+				t->hfp = H_SYNC_OFFSET;
+				t->hsync = H_SYNC_WIDTH;
+				t->hpixel = H_ACTIVE;
+				t->hbp = H_BLANKING - (H_SYNC_WIDTH+H_SYNC_OFFSET);
+
+				t->vfp = V_SYNC_OFFSET;
+				t->vsync = V_SYNC_WIDTH;
+				t->vpixel = V_ACTIVE;
+				t->vbp = V_BLANKING - (V_SYNC_WIDTH+V_SYNC_OFFSET);
+
+				fps = PIXEL_CLOCK/(vtotal*htotal);
+				if( fps == 59 ) 
+					fps = 60;
+				t->option = VPP_SET_OPT_FPS(t->option,fps);
+				t->option |= INTERLACED? VPP_OPT_INTERLACE:0;
+				t->option |= HSYNC_POSITIVE? (VPP_DVO_SYNC_POLAR_HI+VPP_VGA_HSYNC_POLAR_HI):0;
+				t->option |= VSYNC_POSITIVE? (VPP_DVO_VSYNC_POLAR_HI+VPP_VGA_VSYNC_POLAR_HI):0;
+
+				if( vout_check_ratio_16_9(H_ACTIVE,V_ACTIVE) ){
+					edid_info.option |= EDID_OPT_16_9;
+				}
+				break;
 			}
 		}
 	}
@@ -229,8 +254,9 @@ static int parse_monitor_limits( unsigned char * block )
 
     DBGMSG( "\tHorizontal Frequency: %u-%u Hz\n", H_MIN_RATE, H_MAX_RATE );
     DBGMSG( "\tVertical   Frequency: %u-%u kHz\n", V_MIN_RATE, V_MAX_RATE );
-    if ( MAX_PIXEL_CLOCK == 10*0xff )
+    if ( MAX_PIXEL_CLOCK == 10*0xff ){
         DBGMSG( "\t# Max dot clock not given\n" );
+    }
     else {
         DBGMSG( "\t# Max dot clock (video bandwidth) %u MHz\n", (int)MAX_PIXEL_CLOCK );
 		edid_info.pixel_clock_limit = MAX_PIXEL_CLOCK;
@@ -382,7 +408,6 @@ int edid_parse_v1( unsigned char * edid )
     char  vendor_sign[4];
     int   i, ret = 0;
 
-	memset(&edid_info,0,sizeof(edid_info_t));
     for( i = 0; i < EDID_LENGTH; i++ )
         checksum += edid[ i ];
 
@@ -466,7 +491,8 @@ int edid_parse_CEA(unsigned char *edid)
 	unsigned char *block;
 	unsigned char checksum = 0;
 	int i,len;
-	unsigned int pixclk, hpixel, hporch, vpixel, vporch, fps;
+	vpp_timing_t *p;
+	unsigned int fps;
 	
 	if((edid[0]!=0x2) || (edid[1]!=0x3)){
 		return -1;
@@ -503,35 +529,35 @@ int edid_parse_CEA(unsigned char *edid)
 					default:
 					case 0: // reserved
 					case 15:// reserved
-						DBGMSG("\t Reserved Audio Fmt %d\n"); break;
+						DBGMSG("\t Reserved Audio Fmt\n"); break;
 					case 1: // LPCM
-						DBGMSG("\t Audio Fmt LPCM %d\n"); break;
+						DBGMSG("\t Audio Fmt LPCM\n"); break;
 					case 2: // AC3
-						DBGMSG("\t Audio Fmt AC3 %d\n"); break;
+						DBGMSG("\t Audio Fmt AC3\n"); break;
 					case 3: // MPEG1
-						DBGMSG("\t Audio Fmt MPEG1 %d\n"); break;
+						DBGMSG("\t Audio Fmt MPEG1\n"); break;
 					case 4: // MP3
-						DBGMSG("\t Audio Fmt MP3 %d\n"); break;
+						DBGMSG("\t Audio Fmt MP3\n"); break;
 					case 5: // MPEG2
-						DBGMSG("\t Audio Fmt MPEG2 %d\n"); break;
+						DBGMSG("\t Audio Fmt MPEG2\n"); break;
 					case 6: // AAC
-						DBGMSG("\t Audio Fmt AAC %d\n"); break;
+						DBGMSG("\t Audio Fmt AAC\n"); break;
 					case 7: // DTS
-						DBGMSG("\t Audio Fmt DTS %d\n"); break;
+						DBGMSG("\t Audio Fmt DTS\n"); break;
 					case 8: // ATRAC
-						DBGMSG("\t Audio Fmt ATRAC %d\n"); break;
+						DBGMSG("\t Audio Fmt ATRAC\n"); break;
 					case 9: // One bit audio
-						DBGMSG("\t Audio Fmt ONE BIT AUDIO %d\n"); break;
+						DBGMSG("\t Audio Fmt ONE BIT AUDIO\n"); break;
 					case 10:// Dolby
-						DBGMSG("\t Audio Fmt DOLBY %d\n"); break;
+						DBGMSG("\t Audio Fmt DOLBY\n"); break;
 					case 11:// DTS-HD
-						DBGMSG("\t Audio Fmt DTS-HD %d\n"); break;
+						DBGMSG("\t Audio Fmt DTS-HD\n"); break;
 					case 12:// MAT (MLP)
-						DBGMSG("\t Audio Fmt MAT %d\n"); break;
+						DBGMSG("\t Audio Fmt MAT\n"); break;
 					case 13:// DST
-						DBGMSG("\t Audio Fmt DST %d\n"); break;
+						DBGMSG("\t Audio Fmt DST\n"); break;
 					case 14:// WMA Pro
-						DBGMSG("\t Audio Fmt WMA+ %d\n"); break;
+						DBGMSG("\t Audio Fmt WMA+\n"); break;
 				}
 				
 				DBGMSG("\t Max channel %d\n", (block[1] & 0x7)+1 );				
@@ -628,20 +654,29 @@ int edid_parse_CEA(unsigned char *edid)
 	block = edid + edid[2];
 	len = (128 - edid[2]) / 18;
 	for(i=0; i<len; i++, block += 18 ){
-		pixclk = ((block[1]<<8)+block[0])*10000;
-		if( pixclk == 0 ) break;
-		hpixel = ((block[4]&0xF0)<<4)+block[2];
-		hporch = ((block[4]&0x0F)<<8)+block[3];
-		vpixel = ((block[7]&0xF0)<<4)+block[5];
-		vporch = ((block[7]&0x0F)<<8)+block[6];
-		fps = pixclk / ((hpixel+hporch)*(vpixel+vporch));
-		if( block[17] & 0x80 ) vpixel *= 2;
+		p = &edid_info.cea_timing[i];
+		if( (p->pixel_clock = ((block[1]<<8)+block[0])*10000) == 0 ){
+			break;
+		}
+		p->hpixel = ((block[4]&0xF0)<<4)+block[2];
+		p->hbp = ((block[4]&0x0F)<<8)+block[3];		// h porch
+		p->vpixel = ((block[7]&0xF0)<<4)+block[5];
+		p->vbp = ((block[7]&0x0F)<<8)+block[6];		// v porch
+		fps = p->pixel_clock / ((p->hpixel+p->hbp)*(p->vpixel+p->vbp));
 		if( fps == 59 ) fps = 60;
-		DBGMSG("Support %dx%d%s@%d,clk %d\n",hpixel,vpixel,(block[17]&0x80)?"I":"P",fps,pixclk);
-		edid_info.cea_timing[i].resx = hpixel;
-		edid_info.cea_timing[i].resy = vpixel;
-		edid_info.cea_timing[i].freq = fps;
-		edid_info.cea_timing[i].freq |= (block[17]&0x80)?EDID_TMR_INTERLACE:0;
+		p->hfp = ((block[11]&0xC0)<<2)+block[8];
+		p->hsync = ((block[11]&0x30)<<4)+block[9];
+		p->hbp = p->hbp - p->hfp - p->hsync;
+		p->vfp = ((block[11]&0x0C)<<2)+((block[10]&0xF0)>>4);
+		p->vsync = ((block[11]&0x03)<<4)+(block[10]&0x0F);
+		p->vbp = p->vbp - p->vfp - p->vsync;
+		p->option = VPP_SET_OPT_FPS(p->option,fps);
+		p->option |= (block[17]&0x80)? VPP_OPT_INTERLACE:0;
+		p->option |= (block[17]&0x04)? VPP_DVO_VSYNC_POLAR_HI:0;
+		p->option |= (block[17]&0x02)? VPP_DVO_SYNC_POLAR_HI:0;
+		DBGMSG("\t%dx%d%s@%d,clk %d\n",p->hpixel,p->vpixel,(block[17]&0x80)?"I":"P",fps,p->pixel_clock);
+		DBGMSG("\t\tH bp %d,sync %d,fp %d\n",p->hbp,p->hsync,p->hfp);
+		DBGMSG("\t\tV bp %d,sync %d,fp %d\n",p->vbp,p->vsync,p->vfp);
 	}
 	return 0;
 }
@@ -653,12 +688,14 @@ int edid_parse(unsigned char *edid)
 	if( edid == 0 )
 		return 0;
 
+	memset(&edid_info,0,sizeof(edid_info_t));
 	if( edid_parse_v1(edid) == 0 ){
 		ext_cnt = edid[0x7E];
 		if( ext_cnt >= EDID_BLOCK_MAX ){
 			DPRINT("[EDID] *W* ext block cnt %d\n",ext_cnt);
 			ext_cnt = EDID_BLOCK_MAX - 1;
 		}
+		edid_info.option = EDID_OPT_VALID;
 	}
 
 	while( ext_cnt ){
@@ -671,60 +708,33 @@ int edid_parse(unsigned char *edid)
 		DPRINT("*W* not support EDID\n");
 		edid_dump(edid);
 	}
-	return 0;
+	return edid_info.option;
 }
 
-int edid_find_support(unsigned int resx,unsigned int resy,int freq)
+int edid_find_support(unsigned int resx,unsigned int resy,int freq,vpp_timing_t **timing)
 {
 	int ret;
 	int i;
 
 	ret = 0;
-
-	// find established timing
-	if( edid_info.establish_timing ){
-		for(i=0;i<17;i++){
-			if( edid_info.establish_timing & (0x1 << i) ){
-				if( (resx == edid_establish_timing[i].resx) && (resy == edid_establish_timing[i].resy) ){
-					if( freq == edid_establish_timing[i].freq ){
-						ret = 1;
-						goto find_end;
-					}
-				}
-			}
-		}
-	}
-
-	// find standard timing
-	for(i=0;i<8;i++){
-		if( edid_info.standard_timing[i].resx == 0 )
-			continue;
-		if( (resx == edid_info.standard_timing[i].resx) && (resy == edid_info.standard_timing[i].resy) ){
-			if( freq == edid_info.standard_timing[i].freq ){
-				ret = 2;
-				goto find_end;
-			}
-		}
-	}
-
-	// find detail timing
-	for(i=0;i<4;i++){
-		if( edid_info.detail_timing[i].resx == 0 )
-			continue;
-		if( (resx == edid_info.detail_timing[i].resx) && (resy == edid_info.detail_timing[i].resy) ){
-			if( freq == edid_info.detail_timing[i].freq ){
-				ret = 3;
-				goto find_end;
-			}
-		}
-	}
+	*timing = 0;
 
 	// find cea timing
 	for(i=0;i<6;i++){
-		if( edid_info.cea_timing[i].resx == 0 )
+		unsigned int option;
+		unsigned int vpixel;
+
+		if( edid_info.cea_timing[i].pixel_clock == 0 )
 			continue;
-		if( (resx == edid_info.cea_timing[i].resx) && (resy == edid_info.cea_timing[i].resy) ){
-			if( freq == edid_info.cea_timing[i].freq ){
+		option = VPP_GET_OPT_FPS(edid_info.cea_timing[i].option);
+		vpixel = edid_info.cea_timing[i].vpixel;
+		if( edid_info.cea_timing[i].option & VPP_OPT_INTERLACE ){
+			option |= EDID_TMR_INTERLACE;
+			vpixel *= 2;
+		}
+		if( (resx == edid_info.cea_timing[i].hpixel) && (resy == vpixel) ){
+			if( freq == option ){
+				*timing = &edid_info.cea_timing[i];
 				ret = 4;
 				goto find_end;
 			}
@@ -751,7 +761,55 @@ int edid_find_support(unsigned int resx,unsigned int resy,int freq)
 			interlace = (freq & EDID_TMR_INTERLACE)? HDMI_VIC_INTERLACE:HDMI_VIC_PROGRESS;
 			if( (hdmi_vic_info[vic].option & HDMI_VIC_INTERLACE) == interlace ){
 				ret = 5;
-				break;
+				goto find_end;
+			}
+		}
+	}
+
+	// find detail timing
+	for(i=0;i<4;i++){
+		unsigned int option;
+		unsigned int vpixel;
+
+		if( edid_info.detail_timing[i].pixel_clock == 0 )
+			continue;
+		option = VPP_GET_OPT_FPS(edid_info.detail_timing[i].option);
+		vpixel = edid_info.detail_timing[i].vpixel;
+		if( edid_info.detail_timing[i].option & VPP_OPT_INTERLACE ){
+			option |= EDID_TMR_INTERLACE;
+			vpixel *= 2;
+		}
+		if( (resx == edid_info.detail_timing[i].hpixel) && (resy == edid_info.detail_timing[i].vpixel) ){
+			if( freq == option ){
+				*timing = &edid_info.detail_timing[i];
+				ret = 3;
+				goto find_end;
+			}
+		}
+	}
+
+	// find established timing
+	if( edid_info.establish_timing ){
+		for(i=0;i<17;i++){
+			if( edid_info.establish_timing & (0x1 << i) ){
+				if( (resx == edid_establish_timing[i].resx) && (resy == edid_establish_timing[i].resy) ){
+					if( freq == edid_establish_timing[i].freq ){
+						ret = 1;
+						goto find_end;
+					}
+				}
+			}
+		}
+	}
+
+	// find standard timing
+	for(i=0;i<8;i++){
+		if( edid_info.standard_timing[i].resx == 0 )
+			continue;
+		if( (resx == edid_info.standard_timing[i].resx) && (resy == edid_info.standard_timing[i].resy) ){
+			if( freq == edid_info.standard_timing[i].freq ){
+				ret = 2;
+				goto find_end;
 			}
 		}
 	}

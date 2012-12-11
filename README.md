@@ -3,17 +3,17 @@
 
 ## u-boot
 
-     export PATH=$PATH:$TOOLS/arm-toolchain/bin
-     cd $CURRENT_PATH/u-boot
+     export PATH=$PATH:$arm-toolchain/bin
+     cd u-boot
      make wmt_config
      make all
      
 ## Kernel
 
-     cd $CURRENT_PATH/kernel
-     export PATH=$PATH:$TOOLS/arm-toolchain/bin
-     make 8710_defconfig
-     make ubin
+     export PATH=$PATH:$arm-toolchain/bin
+     make CROSS_COMPILE=arm-none-linux-gnueabi- clean
+     make Android_defconfig
+     make ubin CROSS_COMPILE=arm-none-linux-gnueabi-
 
 
 

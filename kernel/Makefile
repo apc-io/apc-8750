@@ -181,7 +181,7 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
 export KBUILD_BUILDHOST := $(SUBARCH)
 ARCH		?= arm
-CROSS_COMPILE	?= arm-none-eabi-
+CROSS_COMPILE	?= arm-none-linux-gnueabi-
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
@@ -1218,50 +1218,7 @@ clean: archclean $(clean-dirs)
 		-o -name '.*.d' -o -name '.*.tmp' -o -name '*.mod.c' \
 		-o -name '*.symtypes' -o -name 'modules.order' \
 		-o -name 'Module.markers' -o -name '.tmp_*.o.*' \
-		-o -name '*.gcno' \) \
-    ! -name 'ilitek_aimv7.o' \
-    ! -name 'mst_i2c_mtouch.o' \
-    ! -name 'uor6x5x_MT_2010_10_12_release.o' \
-    ! -name 'wmt_ts.o' \
-    ! -name 'vt1603a_mt_spi.o' \
-    ! -name 'cec.o' \
-    ! -name 'dev-cec.o' \
-    ! -name 'dev-vpp.o' \
-    ! -name 'ad7393.o' \
-    ! -name 'lcd-AUO-A080SN01.o' \
-    ! -name 'lcd-CHILIN-LW700at9003.o' \
-    ! -name 'lcd-EKING-EK08009-70135.o' \
-    ! -name 'lcd-HANNSTAR-HSD101PFW2.o' \
-    ! -name 'lcd-INNOLUX-AT070TN83.o' \
-    ! -name 'lcd-oem.o' \
-    ! -name 'vt1632.o' \
-    ! -name 'disp-attr.o' \
-    ! -name 'disp.o' \
-    ! -name 'fb-vpu.o' \
-    ! -name 'ge_accel.o' \
-    ! -name 'ge_main.o' \
-    ! -name 'ge_regs.o' \
-    ! -name 'gmp.o' \
-    ! -name 'govm.o' \
-    ! -name 'govrh.o' \
-    ! -name 'govw.o' \
-    ! -name 'hdmi.o' \
-    ! -name 'hdmi_cp.o' \
-    ! -name 'lcd.o' \
-    ! -name 'lvds.o' \
-    ! -name 'mali.o' \
-    ! -name 'parse-edid.o' \
-    ! -name 'scl.o' \
-    ! -name 'sw_i2c.o' \
-    ! -name 'vout-wmt.o' \
-    ! -name 'vout.o' \
-    ! -name 'vpp-osif.o' \
-    ! -name 'vpp.o' \
-    ! -name 'vppm.o' \
-    ! -name 'vpu.o' \
-    ! -name 'fm34.o' \
-    -type f -print | xargs rm -f
-	@rm -f uzImage.bin
+		-o -name '*.gcno' \) -type f -print | xargs rm -f
 
 # mrproper - Delete all generated files, including .config
 #
@@ -1276,7 +1233,6 @@ $(mrproper-dirs):
 mrproper: clean archmrproper $(mrproper-dirs)
 	$(call cmd,rmdirs)
 	$(call cmd,rmfiles)
-	@rm -f uzImage.bin
 
 # distclean
 #
@@ -1289,7 +1245,6 @@ distclean: mrproper
 		-o -name '.*.rej' -o -size 0 \
 		-o -name '*%' -o -name '.*.cmd' -o -name 'core' \) \
 		-type f -print | xargs rm -f
-		@rm -f uzImage.bin
 
 
 # Packaging of the kernel to various formats

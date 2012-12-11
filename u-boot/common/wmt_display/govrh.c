@@ -75,7 +75,10 @@ void govrh_reg_dump(void)
 #ifdef WMT_FTBLK_GOVRH_VGA
 	DPRINT("VGA CSC %d\n",vppif_reg32_read(GOVRH_VGA_YUV2RGB_ENABLE));
 #endif
-	DPRINT("DVO CSC %d\n",vppif_reg32_read(GOVRH_DVO_YUV2RGB_ENABLE));	
+	DPRINT("DVO CSC %d\n",vppif_reg32_read(GOVRH_DVO_YUV2RGB_ENABLE));
+	DPRINT("CSC enable DVO %d,DISP %d,LVDS %d,HDMI %d\n",vppif_reg32_read(GOVRH_DVO_YUV2RGB_ENABLE),
+		vppif_reg32_read(GOVRH_DISP_CSC_ENABLE),vppif_reg32_read(GOVRH_LVDS_CSC_ENABLE),vppif_reg32_read(GOVRH_HDMI_CSC_ENABLE));
+
 	DPRINT("H264 %d\n",vppif_reg32_read(GOVRH_H264_INPUT_ENABLE));
 	DPRINT("source format %s\n",(vppif_reg32_read(GOVRH_INFMT))?"field":"frame");
 	DPRINT("Y addr 0x%x, C addr 0x%x\n",vppif_reg32_in(REG_GOVRH_YSA),vppif_reg32_in(REG_GOVRH_CSA));
@@ -120,7 +123,6 @@ vpp_flag_t govrh_set_tg_enable(vpp_flag_t enable)
 unsigned int govrh_set_clock(unsigned int pixel_clock)
 {
 	int pmc_clk = 0;
-	extern unsigned int hdmi_pixel_clock;
 
 //	DPRINT("[GOVRH] set clock %d\n",pixel_clock);
 	if( pixel_clock == 27000000 ){
@@ -133,7 +135,9 @@ unsigned int govrh_set_clock(unsigned int pixel_clock)
 		pmc_clk = auto_pll_divisor(DEV_DVO,SET_PLLDIV,0,pixel_clock);
 	}
 //	DPRINT("[GOVRH] set clock %d --> %d\n",pixel_clock,pmc_clk);
-	hdmi_pixel_clock = pmc_clk;
+#ifdef CONFIG_WMT_HDMI
+	g_vpp.hdmi_pixel_clock = pmc_clk;
+#endif
 	return 0;
 }
 
@@ -679,7 +683,9 @@ void govrh_set_timing(vpp_timing_t *timing)
 	if( ptr.option & VPP_OPT_INTERLACE ){
 		vpp_clock_t t2;
 		
-		ptr = *(timing+1);
+		//ptr = *(timing+1);
+		ptr = *timing;
+		ptr.vbp += 1;
 		if( ptr.option & VPP_OPT_HSCALE_UP ){	// 480i & 576i repeat 2 pixel
 			ptr.hpixel *= 2;
 		}
@@ -906,6 +912,7 @@ void govrh_CUR_set_enable(vpp_flag_t enable)
 	DPRINT("[CUR] govrh_CUR_set_enable %d\n",enable);
 
 	vppif_reg32_write(GOVRH_CUR_ENABLE,enable);
+	p_cursor->enable = enable;
 }
 
 void govrh_CUR_set_fb_addr(U32 y_addr,U32 c_addr)
@@ -948,7 +955,7 @@ void govrh_CUR_set_color_key(int enable,int alpha,unsigned int colkey)
 		unsigned int *ptr1,*ptr2;
 		int yuv2rgb;
 
-		ptr1 = (unsigned int *)phys_to_virt(vppif_reg32_in(REG_GOVRH_CUR_ADDR));
+		ptr1 = (unsigned int *)mb_phys_to_virt(vppif_reg32_in(REG_GOVRH_CUR_ADDR));
 		for(i=0;i<p_cursor->fb_p->fb.fb_h;i++){
 			for(j=0;j<p_cursor->fb_p->fb.fb_w;j++){
 				if((*ptr1 & 0xFFFFFF) == (colkey & 0xFFFFFF)){
@@ -962,8 +969,8 @@ void govrh_CUR_set_color_key(int enable,int alpha,unsigned int colkey)
 		}
 
 		yuv2rgb = (p_cursor->colfmt < VDO_COL_FMT_ARGB)? 1:0;
-		ptr1 = (unsigned int*) phys_to_virt(p_cursor->cursor_addr1);
-		ptr2 = (unsigned int*) phys_to_virt(p_cursor->cursor_addr2);
+		ptr1 = (unsigned int*) mb_phys_to_virt(p_cursor->cursor_addr1);
+		ptr2 = (unsigned int*) mb_phys_to_virt(p_cursor->cursor_addr2);
 		for(i=0;i<p_cursor->fb_p->fb.fb_h;i++){
 			for(j=0;j<p_cursor->fb_p->fb.fb_w;j++){
 				*ptr2 = vpp_convert_colfmt(yuv2rgb, *ptr1);
@@ -1096,7 +1103,7 @@ void govrh_CUR_set_framebuffer(vdo_framebuf_t *fb)
 	p_cursor->colfmt = fb->col_fmt;
 	p_cursor->cursor_addr1 = fb->y_addr;
 	if( p_cursor->cursor_addr2 == 0 ){
-		p_cursor->cursor_addr2 = (unsigned int) virt_to_phys((void *)mb_allocate(64*64*4));
+		p_cursor->cursor_addr2 = mb_alloc(64*64*4);
 	}
 	vpp_cache_sync();
 }

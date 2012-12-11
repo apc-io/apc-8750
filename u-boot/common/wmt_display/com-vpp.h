@@ -641,6 +641,7 @@ typedef enum {
 #define VPPIO_VOGET_EDID			_IOR(VPPIO_MAGIC,VPPIO_VOUT_BASE+8,vpp_vout_edid_t)
 #define VPPIO_VOGET_CP_INFO			_IOR(VPPIO_MAGIC,VPPIO_VOUT_BASE+9,vpp_vout_cp_info_t)
 #define VPPIO_VOSET_CP_KEY			_IOW(VPPIO_MAGIC,VPPIO_VOUT_BASE+10,vpp_vout_cp_key_t)
+#define VPPIO_VOSET_AUDIO_PASSTHRU	_IO(VPPIO_MAGIC,VPPIO_VOUT_BASE+11)
 
 /* GOVR ioctl command */
 #define VPPIO_GOVR_BASE				0x20

@@ -246,8 +246,3 @@ config SND_SOC_WM9713
 # Amp
 config SND_SOC_MAX9877
 	tristate
-
-# echo cancellation
-config SND_SOC_FM34
-	tristate
-	depends on SND_SOC

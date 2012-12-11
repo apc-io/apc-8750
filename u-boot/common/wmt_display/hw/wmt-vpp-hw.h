@@ -115,17 +115,22 @@
 #define WMT_FTBLK_VOUT_SDA
 #endif
 #define WMT_FTBLK_VOUT_SDD
+#ifdef CONFIG_WMT_HDMI
 #define WMT_FTBLK_VOUT_HDMI
+#endif
 #define WMT_FTBLK_VOUT_LVDS
 #define WMT_FTBLK_VOUT_BOOT
 /* ----------------------------------------- */
 #else
+#define CONFIG_WMT_HDMI
 #define WMT_FTBLK_VOUT_BOOT
 #define WMT_FTBLK_VOUT_VGA
 #define WMT_FTBLK_VOUT_DVI
 #define WMT_FTBLK_VOUT_LCD
 #define WMT_FTBLK_VOUT_DVO2HDMI
 #define WMT_FTBLK_VOUT_HDMI
+#define WMT_FTBLK_VOUT_SDA
+#define WMT_FTBLK_VOUT_LVDS
 #endif
 /*-------------------- DEPENDENCY -------------------------------------*/
 #ifndef CFG_LOADER
@@ -145,6 +150,7 @@
 #include "wmt-govrh-reg.h"
 #include "wmt-lvds-reg.h"
 #include "wmt-hdmi-reg.h"
+#include "wmt-disp-reg.h"
 #endif
 #endif //WMT_VPP_HW_H
 

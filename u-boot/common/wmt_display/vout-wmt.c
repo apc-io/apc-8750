@@ -29,7 +29,7 @@
  */
 #include "vpp.h"
 
-//#define DEBUG
+// #define DEBUG
 #ifdef DEBUG
 #define VPPMSG(fmt, args...) DPRINT("[VO] %s: " fmt, __FUNCTION__ , ## args)
 #else
@@ -45,9 +45,13 @@ static int vo_plug_flag;
 vout_mode_t vo_plug_mode;
 int (*vo_plug_func)(int hotplug);
 extern int vpp_dac_sense_enable;
+vout_mode_t dvo_vout_mode;
+vout_mode_t int_vout_mode;
+int hdmi_vout_mode;
 vpp_timing_t vo_oem_tmr;
 int hdmi_cur_plugin;
 vout_mode_t vo_poll_mode;
+int lvds_plug;
 
 // GPIO 7 & 9
 swi2c_reg_t vo_gpio_scl = {
@@ -105,6 +109,7 @@ swi2c_handle_t vo_swi2c_dvi = {
 #ifndef CFG_LOADER
 extern int wmt_getsyspara(char *varname, unsigned char *varval, int *varlen);
 extern void hdmi_config_audio(vout_audio_t *info);
+#endif
 
 /*--------------------------------------- API ---------------------------------------*/
 int vo_i2c_proc(int id,unsigned int addr,unsigned int index,char *pdata,int len)
@@ -124,6 +129,10 @@ int vo_i2c_proc(int id,unsigned int addr,unsigned int index,char *pdata,int len)
 	}
 
 	if( handle ){
+		if( wmt_swi2c_check(handle) ){
+			return -1;
+		}
+		
 		if( addr & 0x1 ){	// read
 			*pdata = 0xff;
 #ifdef CONFIG_WMT_EDID			
@@ -152,6 +161,7 @@ int vo_i2c_proc(int id,unsigned int addr,unsigned int index,char *pdata,int len)
 	return ret;
 }
 
+#ifndef CFG_LOADER
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)
 static void vo_do_plug(struct work_struct *ptr)
 #else
@@ -175,9 +185,7 @@ static void vo_do_plug
 	vo_plug_flag = 0;
 	VPPMSG(KERN_DEBUG "vo_do_plug %d\n",plugin);
 	vppif_reg8_out(GPIO_BASE_ADDR+0x300+VPP_VOINT_NO,0x80);	// GPIO irq enable
-#ifdef CONFIG_WMT_CEC
-	wmt_cec_hotplug_notify(plugin);
-#endif
+	vpp_netlink_notify(USER_PID,DEVICE_PLUG_IN,plugin);
 	return;
 }
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)
@@ -337,47 +345,6 @@ static void vo_plug_enable(int enable,void *func,vout_mode_t mode)
 #endif	
 }
 
-int vo_set_govr_timing(unsigned int resx,unsigned int resy,unsigned int *pixclk,unsigned int option)
-{
-	int fps = 0;
-
-	if( resx && resy && pixclk ){
-		vpp_timing_t *timing;
-
-		timing = vpp_get_video_mode_ext(resx,resy,*pixclk,option);
-		govrh_set_timing(timing);
-		*pixclk = timing->pixel_clock;
-
-#if 0	// A1 patch
-		{ // HDMI patch for bp-2 & fp+2
-			vout_t *vo;
-
-			vo = vout_get_info(VOUT_HDMI);
-			if( vo && (vo->status & VPP_VOUT_STS_PLUGIN)){
-				vppif_reg32_write(GOVRH_ACTPX_BG,vppif_reg32_read(GOVRH_ACTPX_BG)-2);
-				vppif_reg32_write(GOVRH_ACTPX_END,vppif_reg32_read(GOVRH_ACTPX_END)-2);
-			}
-		}
-#endif
-		fps = VPP_GET_OPT_FPS(timing->option);
-	}
-	else {
-		int pixel,line;
-		
-		if( vo_oem_tmr.pixel_clock ){
-			govrh_set_timing(&vo_oem_tmr);
-			DPRINT("[VO] set OEM timing\n");
-			pixel = vo_oem_tmr.hsync + vo_oem_tmr.hbp + vo_oem_tmr.hpixel + vo_oem_tmr.hfp;
-			line = vo_oem_tmr.vsync + vo_oem_tmr.vbp + vo_oem_tmr.vpixel + vo_oem_tmr.vfp;
-			fps = vo_oem_tmr.pixel_clock / (pixel*line);
-		}
-		else {
-			DPRINT("*E* no OEM timing\n");
-		}
-	}
-	return fps;
-}
-
 /*--------------------------------------- VGA ---------------------------------------*/
 #ifdef WMT_FTBLK_VOUT_VGA
 static int vo_vga_compatible(int arg)
@@ -433,12 +400,10 @@ static int vo_vga_config(int arg)
 
 		vo = vout_get_info(VOUT_LCD);
 		if( vo && (vo->status & VPP_VOUT_STS_ACTIVE ) ){
-			unsigned int line_pixel;
-			vpp_timing_t *timing;
+			vpp_clock_t tmr;
 
-			timing = vpp_get_video_mode(vo_info->resx,vo_info->resy,vo_info->timing.pixel_clock);			
-			line_pixel = timing->hsync + timing->hbp + timing->hpixel + timing->hfp;
-			govrh_set_VGA_sync(timing->hsync, timing->vsync * line_pixel);
+			govrh_get_tg(&tmr);
+			govrh_set_VGA_sync(tmr.hsync,tmr.vsync * tmr.total_pixel_of_line);
 			govrh_set_VGA_sync_polar(1,1);
 			conf = 0;
 		}
@@ -462,13 +427,6 @@ static int vo_vga_config(int arg)
 	VPPMSG(KERN_DEBUG "vo_vga_config %d\n",conf);
 
 	if( conf ){	
-		VPPMSG(KERN_DEBUG "vo_vga_config %dx%d,%d\n",vo_info->resx,vo_info->resy,vo_info->timing.pixel_clock);
-		if( (vo_info->resx == 1280) && (vo_info->resy == 720) ){
-			if( (vo_info->timing.pixel_clock/1000) == 74250 ){
-				vo_info->timing.pixel_clock = 74500000;
-			}
-		}
-		vo_info->fps = vo_set_govr_timing(vo_info->resx,vo_info->resy,&vo_info->timing.pixel_clock,vo->option[1]);
 		vppif_reg32_write(GOVRH_ACTPX_BG,vppif_reg32_read(GOVRH_ACTPX_BG)-1);
 		vppif_reg32_write(GOVRH_ACTPX_END,vppif_reg32_read(GOVRH_ACTPX_END)-1);
 	}
@@ -543,6 +501,15 @@ static int vo_vga_chkplug(int arg)
 	return plugin;
 }
 
+#ifdef __KERNEL__
+int vo_vga_plugin;
+static void vo_vga_do_notify(struct work_struct *ptr)
+{
+	vpp_netlink_notify(USER_PID,DEVICE_PLUG_IN,vo_vga_plugin);
+}
+DECLARE_DELAYED_WORK(vo_vga_notify_work, vo_vga_do_notify);
+#endif
+
 int vo_vga_plug_detect(void)
 {
 	static unsigned int sense_cnt = 0;
@@ -558,6 +525,12 @@ int vo_vga_plug_detect(void)
 		return -1;
 	}
 
+	if( (vppif_reg32_in(REG_VPP_INTSTS) & BIT10) || (g_vpp.vga_intsts & BIT10) ){
+		sense_cnt--;
+//		DPRINT("*W* vga detect over vbie %x %x\n",vppif_reg32_in(REG_VPP_INTSTS),g_vpp.vga_intsts);
+		return -1;
+	}
+
 	if( vppif_reg32_read(GOVRH_DAC_PWRDN) == 1 ){
 		vppif_reg32_write(GOVRH_DAC_PWRDN, 0);	/* DAC power on */
 		sense_cnt--;
@@ -570,6 +543,10 @@ int vo_vga_plug_detect(void)
 		govrh_set_vga_enable(plugin);
 		pre_plugin = plugin;
 		DPRINT("[VOUT] VGA PLUG %s\n",(plugin)?"IN":"OUT");
+#ifdef __KERNEL__
+		vo_vga_plugin = plugin;
+		schedule_delayed_work(&vo_vga_notify_work, HZ/10);
+#endif
 	}
 	return plugin;
 }
@@ -577,16 +554,17 @@ int vo_vga_plug_detect(void)
 static int vo_vga_get_edid(int arg)
 {
 	char *buf;
+	int ret = 1;
 
 	buf = (char *) arg;
 #ifdef CONFIG_WMT_EDID
-	if( wmt_swi2c_read(&vo_swi2c_vga,0xA0,0,&buf[0],128) == 0 ){
+	if( (ret = vo_i2c_proc(0,0xA0 | BIT(0),0,&buf[0],128)) == 0 ){
 		if( buf[0x7E] ){
-			wmt_swi2c_read(&vo_swi2c_vga,0xA0,128,&buf[128],128);
+			ret = vo_i2c_proc(0,0xA0 | BIT(0),128,&buf[128],128);
 		}
 	}
 #endif
-	return 0;
+	return ret;
 }
 
 vout_ops_t vo_vga_ops = 
@@ -650,10 +628,6 @@ static int vo_dvi_config(int arg)
 	VPPMSG(KERN_DEBUG "vo_dvi_config\n");
 
 	vo_info = (vout_info_t *) arg;
-	vo = vout_get_info(VOUT_SD_ANALOG);
-	if( !(vo && (vo->status & VPP_VOUT_STS_ACTIVE )) ){
-		vo_info->fps = vo_set_govr_timing(vo_info->resx,vo_info->resy,&vo_info->timing.pixel_clock,vo->option[1]);
-	}
 	vo = vout_get_info(VOUT_DVI);	
 	if( vo->dev_ops ){
 		vo->dev_ops->config(vo_info);
@@ -668,6 +642,7 @@ static int vo_dvi_init(int arg)
 	VPPMSG(KERN_DEBUG "vo_dvi_init(%d)\n",arg);
 
 	vo = vout_get_info(VOUT_DVI);
+	vo->vo_option = vo->option[1];
 	if( vo->dev_ops ){
 		vo->dev_ops->set_mode(&vo->option[0]);
 		vo->dev_ops->set_power_down(VPP_FLAG_DISABLE);
@@ -742,9 +717,9 @@ static int vo_dvi_get_edid(int arg)
 
 	buf = (char *) arg;
 #ifdef CONFIG_WMT_EDID
-	if( wmt_swi2c_read(&vo_swi2c_dvi,0xA0,0,&buf[0],128) == 0 ){
+	if( vo_i2c_proc(1,0xA0 | BIT(0),0,&buf[0],128) == 0 ){
 		if( buf[0x7E] ){
-			wmt_swi2c_read(&vo_swi2c_dvi,0xA0,128,&buf[128],128);
+			vo_i2c_proc(1,0xA0 | BIT(0),128,&buf[128],128);
 		}
 	}
 #endif
@@ -786,6 +761,7 @@ static int vo_dvo2hdmi_init(int arg)
 	VPPMSG(KERN_DEBUG "vo_dvo2hdmi_init(%d)\n",arg);
 
 	vo = vout_get_info(VOUT_DVO2HDMI);
+	vo->vo_option = vo->option[1];
 #if 0
 	// EDID not support, default RGB mode
 	if( edid_info.option & EDID_OPT_VALID ){
@@ -874,7 +850,7 @@ static int vo_dvo2hdmi_compatible(int arg)
 //		case VOUT_VGA:
 		case VOUT_DVI:
 		case VOUT_SD_DIGITAL:
-//		case VOUT_SD_ANALOG:
+		case VOUT_SD_ANALOG:
 		case VOUT_LCD:
 			return 1;
 		default:
@@ -885,9 +861,18 @@ static int vo_dvo2hdmi_compatible(int arg)
 
 static int vo_dvo2hdmi_visible(int arg)
 {
+	vout_t *vo;
+	
 	VPPMSG(KERN_DEBUG "vo_dvo2hdmi_visible(%d)\n",arg);
 
-	govrh_set_dvo_enable(arg);
+	vo = vout_get_info(VOUT_DVO2HDMI);
+	if( vo->dev_ops ){
+		vppif_reg32_write(GPIO_BASE_ADDR+0x44,0xFFFFFF,0,(arg)?0:0xFFFFFF);	// Enable GPIO
+//		vo->dev_ops->set_power_down((arg)?0:1);
+	}
+	else {
+		govrh_set_dvo_enable(arg);
+	}
 	return 0;
 }
 
@@ -897,52 +882,11 @@ static int vo_dvo2hdmi_config(int arg)
 	unsigned int reg;
 	unsigned int sense;
 	vout_t *vo;
-	unsigned int vo_option;
 
 	VPPMSG(KERN_DEBUG "vo_dvo2hdmi_config\n");
 
 	vo = vout_get_info(VOUT_DVO2HDMI);
 	vo_info = (vout_info_t *) arg;
-	// 1280x720@60, HDMI pixel clock 74250060 not 74500000
-	if( vppif_reg32_read(GOVRH_DVO_ENABLE) ){	
-		if( (vo_info->resx == 1280) && (vo_info->resy == 720) ){
-			if( vo_info->timing.pixel_clock == 74500000 ){
-				vo_info->timing.pixel_clock = 74250060;
-			}
-		}
-	}
-
-	vo_option = vo->option[1];
-	if( vo->status & VPP_VOUT_STS_PLUGIN ){
-		// check EDID for P/I support
-		unsigned char *buf;
-		unsigned int option;
-		vpp_timing_t *timing;
-
-		timing = vpp_get_video_mode(vo_info->resx,vo_info->resy,vo_info->timing.pixel_clock);
-		buf = (unsigned char *)vout_get_edid(VOUT_DVO2HDMI);
-		if( buf ){
-			unsigned int opt;
-
-			edid_parse(buf);
-			// check EDID for P/I support
-			opt = vo_info->fps | ((vo_option & VOUT_OPT_INTERLACE)? EDID_TMR_INTERLACE:0);
-			if( edid_find_support(vo_info->resx,vo_info->resy,opt) == 0 ){
-				opt = vo_info->fps | ((vo_option & VOUT_OPT_INTERLACE)? 0:EDID_TMR_INTERLACE);				
-				if( edid_find_support(vo_info->resx,vo_info->resy,opt) ){
-					if( opt & EDID_TMR_INTERLACE )
-						vo_option |= VOUT_OPT_INTERLACE;
-					else 
-						vo_option &= ~VOUT_OPT_INTERLACE;
-				}
-				else {
-					DPRINT("[VOUT] *E* HDMI not support\n");
-				}
-			}
-			option = edid_parse_option(buf);
-		}
-	}
-	vo_info->fps = vo_set_govr_timing(vo_info->resx,vo_info->resy,&vo_info->timing.pixel_clock,vo_option);
 	sense = vpp_dac_sense_enable;
 	vpp_dac_sense_enable = 0;
 #ifdef WMT_FTBLK_GOVRH_DAC		
@@ -1070,15 +1014,9 @@ static int vo_lcd_config(int arg)
 
 	vo_info = (vout_info_t *) arg;
 	vo = vout_get_info(VOUT_LCD);
-	if(vo_oem_tmr.pixel_clock){
-		VPPMSG("oem tmr\n");
+	if( vo->dev_ops ){
+		vo->dev_ops->config(vo_info);
 	}
-	else {
-		if( vo->dev_ops ){
-			vo->dev_ops->config(vo_info);
-		}
-	}
-	govrh_set_timing((vo_oem_tmr.pixel_clock)? &vo_oem_tmr:&vo_info->timing);
 	govrh_set_dvo_clock_delay((vo->option[2] & LCD_CAP_CLK_HI)? 0:1, 0);
 	return 0;
 }
@@ -1221,7 +1159,7 @@ static int vo_sda_compatible(int arg)
 	switch(mode){
 		case VOUT_VGA:
 //		case VOUT_DVI:
-//		case VOUT_DVO2HDMI:
+		case VOUT_DVO2HDMI:
 		case VOUT_LCD:
 		case VOUT_SD_DIGITAL:
 		case VOUT_HDMI:
@@ -1244,13 +1182,16 @@ static int vo_sda_visible(int arg)
 	return 0;
 }
 
-vpp_tvsys_t vo_res_to_tvsys(unsigned int resx,unsigned int resy)
+vpp_tvsys_t vo_res_to_tvsys(unsigned int resx,unsigned int resy,int interlace)
 {
 	if( resx == 1280 )
 		return VPP_TVSYS_720P;
 
-	if( resx == 1920 )
-		return VPP_TVSYS_1080I;
+	if( resx == 1920 ){
+		if( interlace )
+			return VPP_TVSYS_1080I;
+		return VPP_TVSYS_1080P;
+	}
 	
 	if( resx != 720 ){
 		return VPP_TVSYS_MAX;
@@ -1262,45 +1203,45 @@ vpp_tvsys_t vo_res_to_tvsys(unsigned int resx,unsigned int resy)
 	return VPP_TVSYS_NTSC;
 }
 
+void vo_tvsys_to_res(vpp_tvsys_t tvsys,vout_info_t *info)
+{
+	switch(tvsys){
+		default:
+		case VPP_TVSYS_NTSC:
+			info->resx = 720;
+			info->resy = 480;
+			info->pixclk = 27027060;
+			break;
+		case VPP_TVSYS_PAL:
+			info->resx = 720;
+			info->resy = 576;
+			info->pixclk = 27000000;
+			break;	
+		case VPP_TVSYS_720P:
+			info->resx = 1280;
+			info->resy = 720;
+			info->pixclk = 74250000;
+			break;
+		case VPP_TVSYS_1080I:
+			info->resx = 1920;
+			info->resy = 1080;
+			info->pixclk = 74250060;
+			break;
+		case VPP_TVSYS_1080P:
+			info->resx = 1920;
+			info->resy = 1080;
+			info->pixclk = 148500000;
+			break;
+	}
+}
+
 static int vo_sda_config(int arg)
 {
 	vout_info_t *vo_info;
-	unsigned int pixel_clock;
 	
 	VPPMSG(KERN_DEBUG "vo_sda_config\n");
 
 	vo_info = (vout_info_t *) arg;
-	switch(p_disp->tvsys){
-		default:
-		case VPP_TVSYS_NTSC:
-			vo_info->resx = 720;
-			vo_info->resy = 480;
-			pixel_clock = 27027060;
-			break;
-		case VPP_TVSYS_PAL:
-			vo_info->resx = 720;
-			vo_info->resy = 576;
-			pixel_clock = 27000000;
-			break;	
-		case VPP_TVSYS_720P:
-			vo_info->resx = 1280;
-			vo_info->resy = 720;
-			pixel_clock = 74250000;
-			break;
-		case VPP_TVSYS_1080I:
-			vo_info->resx = 1920;
-			vo_info->resy = 1080;
-			pixel_clock = 74250060;
-			break;
-		case VPP_TVSYS_1080P:
-			vo_info->resx = 1920;
-			vo_info->resy = 1080;
-			pixel_clock = 148500000;
-			break;
-	}
-	vpp_set_video_mode(vo_info->resx,vo_info->resy,pixel_clock);
-	vo_info->timing.pixel_clock = pixel_clock;
-	disp_set_mode(p_disp->tvsys,p_disp->tvconn);
 	return 0;
 }
 
@@ -1314,6 +1255,7 @@ static int vo_sda_init(int arg)
 
 	p_disp->tvsys = vo->option[0];
 	p_disp->tvconn = vo->option[1];
+	vo->vo_option = (p_disp->tvsys == VPP_TVSYS_1080I)? VOUT_OPT_INTERLACE:0;
 	govrh_DISP_set_enable(VPP_FLAG_ENABLE);
 	vppm_set_DAC_select(1);
 	govrh_DAC_set_sense_value(0,p_disp->dac_sense_val,p_disp->dac_sense_val);
@@ -1364,7 +1306,11 @@ static int vo_sda_chkplug(int arg)
 	int plugin,sense;
 
 	govrh_DAC_set_pwrdn(0);
+#ifdef __KERNEL__
 	vpp_irqproc_work(VPP_INT_GOVRH_PVBI,vpp_irqproc_monitor_dac_sense,&sense,1);
+#else
+	sense = govrh_DAC_monitor_sense();
+#endif
 	plugin = (sense)? 1:0;
 	govrh_DAC_set_pwrdn((plugin)? 0:1);
 	VPPMSG(KERN_DEBUG "vo_sda_chkplug %d,0x%x\n",plugin,sense);
@@ -1470,9 +1416,6 @@ static int vo_sdd_config(int arg)
 
 	vo = vout_get_info(VOUT_SD_DIGITAL);
 	vo_info = (vout_info_t *) arg;
-	p_disp->tvsys = vo->option[0] = vo_res_to_tvsys(vo_info->resx,vo_info->resy);
-	vpp_set_video_mode(720,(p_disp->tvsys==VPP_TVSYS_NTSC)?480:576,(p_disp->tvsys==VPP_TVSYS_NTSC)?27027060:27000050);
-	disp_set_mode(p_disp->tvsys,p_disp->tvconn);
 	if( vo->dev_ops ){
 		vo->dev_ops->set_mode(&vo->option[0]);
 	}
@@ -1487,6 +1430,7 @@ static int vo_sdd_init(int arg)
 	vo = vout_get_info(VOUT_SD_DIGITAL);
 	p_disp->tvsys = vo->option[0];
 	p_disp->tvconn = vo->option[1];
+	vo->vo_option = (p_disp->tvsys == VPP_TVSYS_1080I)? VOUT_OPT_INTERLACE:0;	
 	govrh_DISP_set_enable(VPP_FLAG_ENABLE);
 	vppm_set_DAC_select(1);
 	disp_EXTTV_set_enable(VPP_FLAG_ENABLE);
@@ -1625,8 +1569,9 @@ static int vo_boot_config(int arg)
 	VPPMSG(KERN_DEBUG "vo_boot_config\n");
 
 	vo_info = (vout_info_t *) arg;
-	if( vpp_vo_boot_arg2[0] < VOUT_MODE_MAX ) vout_set_mode(vpp_vo_boot_arg2[0],1);
-	if( vpp_vo_boot_arg[0] < VOUT_MODE_MAX ) vout_set_mode(vpp_vo_boot_arg[0],1);
+	if( int_vout_mode != VOUT_MODE_MAX ) vout_set_mode(int_vout_mode,1);
+	if( dvo_vout_mode != VOUT_MODE_MAX ) vout_set_mode(dvo_vout_mode,1);
+	if( hdmi_vout_mode ) vout_set_mode(VOUT_HDMI,1);
 	if ( g_vpp.govrh_preinit == 0 ){
 		vout_config(VOUT_MODE_ALL,vo_info);
 	}
@@ -1679,8 +1624,8 @@ static int vo_boot_uninit(int arg)
 
 static int vo_boot_suspend(int arg)
 {
-	if( vpp_vo_boot_arg2[0] < VOUT_MODE_MAX ) vout_set_mode(vpp_vo_boot_arg2[0],1);			
-	if( vpp_vo_boot_arg[0] < VOUT_MODE_MAX ) vout_set_mode(vpp_vo_boot_arg[0],1);
+	if( int_vout_mode != VOUT_MODE_MAX ) vout_set_mode(int_vout_mode,1);			
+	if( dvo_vout_mode != VOUT_MODE_MAX ) vout_set_mode(dvo_vout_mode,1);
 	vout_suspend(VOUT_MODE_ALL,arg);
 	return 0;
 }
@@ -1769,6 +1714,7 @@ static int vo_boot_chkplug(int arg)
 			tp->vpixel = vpp_vo_boot_arg[4];
 			tp->pixel_clock = vpp_vo_boot_arg[5];
 
+#ifdef CONFIG_LCD_BACKLIGHT_WMT
 			if( wmt_getsyspara("wmt.display.pwm",(unsigned char *)buf,&varlen) == 0 ){
 				unsigned int id,parm1,parm2,parm3;
 				unsigned int param[4];
@@ -1796,12 +1742,42 @@ static int vo_boot_chkplug(int arg)
 					DPRINT("[VOUT] blt %d,scalar %d,period %d,duty %d\n",lcd_blt_id,parm1,parm2,parm3);
 				}
 			}
+#endif
+		}
+		else if( vpp_vo_boot_arg[0]==VOUT_LVDS ){
+			DPRINT("[VOUT] LVDS %d:%d:%d\n",vpp_vo_boot_arg[0],vpp_vo_boot_arg[1],vpp_vo_boot_arg[2]);
+			if( vpp_vo_boot_arg[1] == 0 ){
+				char *edid;
+				if( (edid = vout_get_edid(VOUT_LVDS)) ){
+					edid_parse(edid);
+					if( edid_info.detail_timing[0].pixel_clock ){
+						tp = &edid_info.detail_timing[0];
+						vo_oem_tmr = *tp;
+						lvds_plug = 1;
+					}
+				}
+				else {
+					DPRINT("edid fail\n");
+				}
+			}
+			else {
+				if( (p_lcd = lcd_get_parm((lcd_panel_t) vpp_vo_boot_arg[1],vpp_vo_boot_arg[2])) ){
+					tp = &p_lcd->timing;
+					vo_oem_tmr = *tp;
+					lvds_plug = 1;
+				}
+			}
+
+			if( lvds_plug ){
+				DPRINT("[LVDS] %dx%d\n",tp->hpixel,tp->vpixel);
+			}
 		}
 		else if((vpp_vo_boot_arg[3]==0) || (vpp_vo_boot_arg[4]==0) || (vpp_vo_boot_arg[5]==0)){
 			oem_tmr = 1;
 		}
 		else {
-			tp = vpp_get_video_mode(vpp_vo_boot_arg[3], vpp_vo_boot_arg[4], vpp_vo_boot_arg[5]);
+			int index = 0;
+			tp = vpp_get_video_mode(vpp_vo_boot_arg[3], vpp_vo_boot_arg[4], vpp_vo_boot_arg[5],&index);
 		}
 
 		if( oem_tmr ){
@@ -1838,6 +1814,7 @@ static int vo_boot_chkplug(int arg)
 		}
 		vo_boot_parm.pixclk = (oem_tmr)? 0:tp->pixel_clock;	// To use OEM timing , pixel clock equal 0
 		vo_oem_tmr.pixel_clock = (oem_tmr)? vo_oem_tmr.pixel_clock:0;
+		dvo_vout_mode = vpp_vo_boot_arg[0];
 		if( vpp_vo_boot_arg2[0] < VOUT_MODE_MAX ){
 			vout_t *vo2;
 			vo2 = vout_get_info(vpp_vo_boot_arg2[0]);
@@ -1848,9 +1825,13 @@ static int vo_boot_chkplug(int arg)
 			}
 			vo2->option[0] = vpp_vo_boot_arg2[1];
 			vo2->option[1] = vpp_vo_boot_arg2[2];
+			int_vout_mode = vpp_vo_boot_arg2[0];
 		}
+		int_vout_mode = (vpp_vo_boot_arg2[0] < VOUT_MODE_MAX)? vpp_vo_boot_arg2[0]:VOUT_MODE_MAX;
+		printk("[VOUT] boot argument vo1 %d,vo2 %d\n",dvo_vout_mode,int_vout_mode);
 		return 1;
 	}
+	hdmi_vout_mode = 1;
 //vo_boot_chkplug_end:
 	return 0;
 }
@@ -1889,6 +1870,12 @@ struct timer_list hdmi_cp_timer;
 void vo_hdmi_cp_set_enable_tmr(int sec)
 {
 	VPPMSG("[HDMI] set enable tmr %d sec\n",sec);
+
+	if( sec == 0 ){
+		hdmi_set_cp_enable(VPP_FLAG_ENABLE);
+		return ;
+	}
+	
 #ifdef __KERNEL__
 	if( hdmi_cp_timer.function ){
 		mod_timer(&hdmi_cp_timer,(jiffies + sec * HZ));
@@ -1907,8 +1894,6 @@ void vo_hdmi_cp_set_enable_tmr(int sec)
 }
 
 #ifndef CFG_LOADER
-int hdmi_ri_tm_cnt;
-
 static irqreturn_t vo_hdmi_cp_interrupt
 (
 	int irq, 				/*!<; // irq id */
@@ -1987,8 +1972,12 @@ static irqreturn_t vo_hdmi_plug_interrupt
 
 static int vo_hdmi_init(int arg)
 {
+	vout_t *vo;
+
 	VPPMSG("[VOUT] vo_hdmi_init(%d)\n",arg);
 
+	vo = vout_get_info(VOUT_HDMI);
+	vo->vo_option = vo->option[1];
 	vout_change_status(vout_get_info(VOUT_HDMI),VOCTL_CHKPLUG,0,hdmi_check_plugin(0));
 	lvds_set_enable(0);
 	hdmi_enable_plugin(1);
@@ -2072,9 +2061,7 @@ static int vo_hdmi_config(int arg)
 	vout_info_t *vo_info;
 	hdmi_info_t hdmi_info;
 	vdo_color_fmt colfmt;
-	vpp_timing_t *timing;
 	unsigned int option = 0;
-	unsigned int vo_option;
 
 	hdmi_set_enable(0);
 
@@ -2084,63 +2071,27 @@ static int vo_hdmi_config(int arg)
 	VPPMSG(KERN_DEBUG "vo_hdmi_config(%dx%d@%d)\n",vo_info->resx,vo_info->resy,vo_info->fps);
 	VPPMSG(KERN_DEBUG "vo_hdmi_config(op 0x%x,0x%x)\n",vo->option[0],vo->option[1]);
 	
-	// 1280x720@60, HDMI pixel clock 74250060 not 74500000
-	if( (vo_info->resx == 1280) && (vo_info->resy == 720) ){
-		if( vo_info->timing.pixel_clock == 74500000 ){
-			vo_info->timing.pixel_clock = 74250060;
-		}
-	}
 	colfmt = (vo->option[0]==VDO_COL_FMT_YUV422V)? VDO_COL_FMT_YUV422H:vo->option[0];
-	vo_option = vo->option[1];
-
 	hdmi_cur_plugin = hdmi_check_plugin(0);
 	if( (hdmi_cur_plugin ) ){
 #ifdef CONFIG_WMT_EDID
 		unsigned char *buf;
 		
 		buf = (unsigned char *)vout_get_edid(VOUT_HDMI);
-		if( buf ){
-			unsigned int opt;
-			
-			edid_parse(buf);
-			// check EDID for P/I support
-			opt = vo_info->fps | ((vo_option & VOUT_OPT_INTERLACE)? EDID_TMR_INTERLACE:0);
-			if( edid_find_support(vo_info->resx,vo_info->resy,opt) == 0 ){
-				opt = vo_info->fps | ((vo_option & VOUT_OPT_INTERLACE)? 0:EDID_TMR_INTERLACE);
-				if( edid_find_support(vo_info->resx,vo_info->resy,opt) ){
-					if( opt & EDID_TMR_INTERLACE )
-						vo_option |= VOUT_OPT_INTERLACE;
-					else 
-						vo_option &= ~VOUT_OPT_INTERLACE;
-				}
-				else {
-					DPRINT("[VOUT] *E* HDMI not support\n");
-				}
-			}
-			option = edid_parse_option(buf);
-		}
+		option = edid_parse_option(buf);
 #endif
 #ifdef CONFIG_VPP_DEMO
 		option |= EDID_OPT_HDMI + EDID_OPT_AUDIO;
 #endif
 	}
 
-	vo = vout_get_info(VOUT_LCD);
-	if( vo && (vo->status & VPP_VOUT_STS_ACTIVE ) ){
-		VPPMSG("hdmi use LCD timing\n");
-	}
-	else {
-		vo_info->fps = vo_set_govr_timing(vo_info->resx,vo_info->resy,(unsigned int *)&vo_info->fps,vo_option);
-	}
-	timing = vpp_get_video_mode_ext(vo_info->resx,vo_info->resy,vo_info->fps,vo_option);
-
 	hdmi_info.option = option;
 	hdmi_info.channel = g_vpp.hdmi_audio_channel;
 	hdmi_info.freq = g_vpp.hdmi_audio_freq;
 	hdmi_info.outfmt = colfmt;
-	hdmi_info.vic = VPP_GET_OPT_HDMI_VIC(timing->option);
+	hdmi_info.vic = VPP_GET_OPT_HDMI_VIC(vo_info->option);
 	govrh_set_csc_mode(p_govrh->fb_p->csc_mode);
-	hdmi_set_sync_low_active((timing->option & VPP_VGA_HSYNC_POLAR_HI)? 0:1,(timing->option & VPP_VGA_VSYNC_POLAR_HI)? 0:1);
+	hdmi_set_sync_low_active((vo_info->option & VPP_VGA_HSYNC_POLAR_HI)? 0:1,(vo_info->option & VPP_VGA_VSYNC_POLAR_HI)? 0:1);
 	hdmi_config(&hdmi_info);
 #ifdef CONFIG_HDMI_QUANTUMDATA
 	hdmi_set_cp_enable((g_vpp.hdmi_cp_enable && hdmi_cur_plugin));
@@ -2242,9 +2193,7 @@ static int vo_lvds_compatible(int arg)
 		case VOUT_DVI:
 		case VOUT_SD_DIGITAL:
 		case VOUT_SD_ANALOG:
-#ifndef CONFIG_LCD_VGA_DUAL_OUTPUT
 		case VOUT_VGA:
-#endif
 		case VOUT_HDMI:
 			return 1;
 		default:
@@ -2260,9 +2209,6 @@ static int vo_lvds_visible(int arg)
 	VPPMSG(KERN_DEBUG "vo_lvds_visible(%d)\n",arg);
 	vo = vout_get_info(VOUT_LVDS);
 	lvds_set_enable(arg);
-	if( vo->dev_ops ){
-		vo->dev_ops->set_power_down(!arg);
-	}
 	return 0;
 }
 
@@ -2275,10 +2221,6 @@ static int vo_lvds_config(int arg)
 
 	vo_info = (vout_info_t *) arg;
 	vo = vout_get_info(VOUT_LVDS);
-	if( vo->dev_ops ){
-		vo->dev_ops->config(vo_info);
-	}
-	vpp_set_video_mode(vo_info->resx,vo_info->resy,vo_info->timing.pixel_clock);
 	return 0;
 }
 
@@ -2290,9 +2232,6 @@ static int vo_lvds_init(int arg)
 	VPPMSG(KERN_DEBUG "vo_lvds_init(%d)\n",arg);
 
 	vo = vout_get_info(VOUT_LVDS);
-	if( vo->dev_ops ){
-		vo->dev_ops->set_mode(&vo->option[0]);
-	}
 	capability = vo->option[2];
 	lvds_set_power_down(VPP_FLAG_DISABLE);
 	lvds_set_enable(VPP_FLAG_ENABLE);
@@ -2322,9 +2261,6 @@ static int vo_lvds_uninit(int arg)
 	VPPMSG(KERN_DEBUG "vo_lvds_uninit(%d)\n",arg);
 	lvds_set_enable(VPP_FLAG_DISABLE);
 	vo = vout_get_info(VOUT_LVDS);
-	if( vo->dev_ops ){
-		vo->dev_ops->set_mode(0);
-	}
 	lvds_set_power_down(VPP_FLAG_ENABLE);
 	return 0;
 }
@@ -2336,9 +2272,6 @@ static int vo_lvds_suspend(int arg)
 	VPPMSG(KERN_DEBUG "vo_lvds_suspend(%d)\n",arg);
 
 	vo = vout_get_info(VOUT_LVDS);	
-	if( vo->dev_ops ){
-		vo->dev_ops->set_power_down(1);
-	}
 	lvds_set_enable(VPP_FLAG_DISABLE);
 	return 0;
 }
@@ -2352,9 +2285,6 @@ static int vo_lvds_resume(int arg)
 	lvds_set_enable(VPP_FLAG_ENABLE);
 	mdelay(150);
 	vo = vout_get_info(VOUT_LVDS);
-	if( vo->dev_ops ){
-		vo->dev_ops->set_power_down(0);
-	}
 	return 0;
 }
 
@@ -2365,10 +2295,7 @@ static int vo_lvds_chkplug(int arg)
 	VPPMSG(KERN_DEBUG "vo_lvds_chkplug\n");
 	
 	vo = vout_get_info(VOUT_LVDS);
-	if( vo->dev_ops ){
-		return vo->dev_ops->check_plugin(0);
-	}
-	return 0;
+	return lvds_plug;
 }
 
 vout_ops_t vo_lvds_ops = 
@@ -2381,6 +2308,9 @@ vout_ops_t vo_lvds_ops =
 	.suspend = vo_lvds_suspend,
 	.resume = vo_lvds_resume,
 	.chkplug = vo_lvds_chkplug,
+#ifdef WMT_FTBLK_VOUT_HDMI
+	.get_edid = vo_hdmi_get_edid,
+#endif
 };
 
 vout_t vo_lvds_parm = {
@@ -2457,7 +2387,7 @@ int vout_set_audio(vout_audio_t *arg)
 {
 	vout_t *vout;
 	int ret = 0;
-	
+
 	vout = vout_get_info(VOUT_DVO2HDMI);
 	if( vout && (vout->status & VPP_VOUT_STS_PLUGIN)){
 		if( vout->dev_ops->set_audio ){
@@ -2472,8 +2402,8 @@ int vout_set_audio(vout_audio_t *arg)
 		hdmi_config_audio(arg);
 		ret = 1;
 	}
+#endif
 	return ret;
-#endif	
 }
 
 void vout_plug_detect(vout_mode_t mode)
@@ -2495,46 +2425,13 @@ void vout_plug_detect(vout_mode_t mode)
 			plugin = vo_sda_plug_detect();
 			break;
 #endif
+#ifdef WMT_FTBLK_VOUT_HDMI
 		case VOUT_HDMI:
-            {
-	            int reset = 0;
-	            
-			    if( hdmi_check_cp_dev_cnt() ){
-				    DPRINT("[HDMI] rx dev cnt zero\n");
-				    reset = 1;
-			    }
-			            
-			    if( vppif_reg32_read(HDMI_CP_ENABLE) ){
-				    if( hdmi_ri_tm_cnt && (vppif_reg32_read(HDMI_CP_RI_CNT) > 1) ){
-					    if( vppif_reg32_read(HDMI_CP_TX_RI) != vppif_reg32_read(HDMI_CP_RX_RI) ){
-						    hdmi_ri_tm_cnt--;
-						    if( hdmi_ri_tm_cnt == 0 ){
-							    reset = 2;
-							    DPRINT("[HDMI] RI rx timeout\n");
-						    } 					
-					    }
-				    }
-			    }
-			    else {
-				    hdmi_ri_tm_cnt = 0;
-			    }
-
-	            if( reset ){
-		            vout_t *vo;
-            
-		            vo = vout_get_info(VOUT_HDMI);
-		            if( reset == 1 ){
-			            hdmi_set_cp_enable(VPP_FLAG_DISABLE);
-			            vo_hdmi_cp_set_enable_tmr(VOUT_HDMI_CP_TIME);
-		            }
-		            else {
-			            hdmi_set_cp_enable(VPP_FLAG_DISABLE);
-			            hdmi_set_cp_enable(VPP_FLAG_ENABLE);
-		            }
-		            vo->status &= ~VPP_VOUT_STS_CONTENT_PROTECT;
-	            }
-            }
+			if( hdmi_poll_cp_status() ){
+				vo_hdmi_cp_set_enable_tmr(VOUT_HDMI_CP_TIME);
+			}
 			break;
+#endif
 		default:
 			break;
 	}
@@ -2563,6 +2460,11 @@ vout_mode_t vout_extdev_probe(void)
 			parm->dev_ops = dev;
 			break;
 		}
+		if( dev->mode == VOUT_EXTDEV_DEFAULT_MODE ){
+			mode = dev->mode;
+			parm = vo_parm_table[mode];
+			parm->dev_ops = 0; // dev;
+		}
 	} while(1);
 
 	if( mode == VOUT_MODE_MAX ){
@@ -2576,6 +2478,7 @@ vout_mode_t vout_extdev_probe(void)
 	}
 
 	vout_register(mode,parm);	
+	printk("[VOUT] ext dev : %s\n",(parm)? parm->name:"NO");
 	return mode;
 }
 
@@ -2602,6 +2505,7 @@ vout_mode_t vout_intdev_probe(void)
 	hdmi_init();
 	vout_register(VOUT_HDMI,&vo_hdmi_parm);
 #endif
+	printk("[VOUT] int dev : %s\n",(mode != VOUT_MODE_MAX)? vo_parm_table[mode]->name:"NO");
 	return mode;
 }
 
@@ -2613,18 +2517,34 @@ int vout_init(vout_info_t *info)
 {
 	vout_t *vo = 0;
 	int sense_enable;
-	unsigned int vout_prio_valid = 0;
 	
 	VPPMSG(KERN_ALERT "vo_init_wmt\n");
 
 	/* check video out device */
-	vout_extdev_probe();
-	vout_intdev_probe();
+	dvo_vout_mode = vout_extdev_probe();
+	int_vout_mode = vout_intdev_probe();
+
+	/* disable video out by uboot param */
+	{
+		unsigned int temp = 10;
+		unsigned char buf[10],*endp;
+		int i;
+	
+		if( wmt_getsyspara("wmt.display.vout.disable",buf,&temp) == 0 ){
+			temp = simple_strtoul(buf, &endp, 16);
+			for(i=0;i<VOUT_MODE_MAX;i++){
+				if( temp & (0x1 << i) ){
+					vout_unregister(i);
+				}
+			}
+		}
+	}
+	
     vout_register(VOUT_BOOT,&vo_boot_parm);
 	{
 		int i;
+		int match = 0;
 		unsigned int user_resx,user_resy,user_freq;
-		int plugin;
 #ifndef CFG_LOADER
 		unsigned char buf[40];
 		int varlen = 40;
@@ -2636,6 +2556,26 @@ int vout_init(vout_info_t *info)
 			sscanf(buf,"%dx%d@%d",&user_resx,&user_resy,&user_freq);
 			DPRINT("user res %dx%d@%d\n",user_resx,user_resy,user_freq);
 		}
+
+		if( wmt_getsyspara("wmt.display.sda_tvsys",buf,&varlen) == 0 ){
+			int tvsys;
+
+			vo = vout_get_info(VOUT_SD_ANALOG);
+			sscanf(buf,"%d",&tvsys);
+			DPRINT("sda tvsys %d\n",tvsys);
+			vo->option[0] = tvsys;
+			int_vout_mode = VOUT_MODE_MAX;
+			switch( tvsys ){
+				case VPP_TVSYS_NTSC:
+					vo->resx = 720;
+					vo->resy = 480;
+					break;
+				case VPP_TVSYS_PAL:
+					vo->resx = 720;
+					vo->resy = 576;
+					break;
+			}
+		}
 #else
 		user_resx = user_resy = user_freq = 0;
 #endif
@@ -2643,73 +2583,94 @@ int vout_init(vout_info_t *info)
 		sense_enable = vpp_dac_sense_enable;
 		vpp_dac_sense_enable = 0;
 		for(i=0;vout_priority[i]!=VOUT_MODE_MAX;i++){
-			if( (vo = vout_get_info(vout_priority[i])) ){
-				if( (plugin = vout_chkplug(vout_priority[i])) ){
-					if( vout_priority[i] == VOUT_BOOT ){
-						vout_prio_valid |= (0x1 << i);
-						vo = vout_get_info(vpp_vo_boot_arg[0]);
-						info->resx = vpp_vo_boot_arg[3];
-						info->resy = vpp_vo_boot_arg[4];
-						info->fps = vpp_vo_boot_arg[5];
-						break;
-					}
-
-					if( vout_prio_valid == 0 ){ // master vout
-						int edid_support = 0;
-
-						if( user_resx == 0 ){	// if no user resolution then use vout default
+			if( vout_get_info(vout_priority[i]) ){
+				if( vout_chkplug(vout_priority[i]) ){
+					if( vout_priority[i] == VOUT_HDMI )
+						hdmi_vout_mode = 1;
+					vo = vout_get_info(vout_priority[i]);
+					if( user_resx == 0 ){
+						if( vout_priority[i] == VOUT_VGA ){
+							user_resx = 1440;
+							user_resy = 1024;
+							user_freq = 60;
+						}
+						else {
 							user_resx = vo->resx;
 							user_resy = vo->resy;
 							user_freq = VPP_HD_DISP_FPS;
 						}
+					}
+					
 #ifdef CONFIG_WMT_EDID
-						if( vout_get_edid(vout_priority[i]) ){
-							if( edid_parse((unsigned char *)vo->edid) == 0 ){
-								if( edid_find_support(user_resx,user_resy,user_freq) ){
-									edid_support = 1;
+					if( vout_get_edid(vout_priority[i]) ){
+						int edid_option;
+						
+						if( (edid_option = edid_parse((unsigned char *)vo->edid)) == 0 ){
+							DPRINT("*E* EDID data fail\n");
+						}
+						else {
+							vpp_timing_t *edid_timing;
+							if( edid_find_support(user_resx,user_resy,user_freq,&edid_timing) ){
+								match = 1;
+							}
+							else {
+								if( vout_find_edid_support_mode(&user_resx,&user_resy,&user_freq,
+															(edid_option & EDID_OPT_16_9)? 1:0) ){
+									match = 1;
 								}
 							}
 						}
-#endif
-						if( edid_support ){
-							info->resx = user_resx;
-							info->resy = user_resy;
-							info->fps = user_freq;
-						}
-						else { 	// use default
-							info->resx = vo->resx;
-							info->resy = vo->resy;
-							info->fps = vo->pixclk;
-						}
-						DPRINT("[VOUT] master %s,edid support %d,%dx%d@%d\n",vpp_vout_str[vout_priority[i]]
-															,edid_support,info->resx,info->resy,info->fps);
 					}
-					vout_prio_valid |= (0x1 << i);
+					else {
+						if( vout_priority[i] != VOUT_BOOT ){
+							DPRINT("*E* read EDID fail (%s)\n",vpp_vout_str[vout_priority[i]]);
+						}
+					}
+#endif
+
+					if( match ){
+						info->resx = user_resx;
+						info->resy = user_resy;
+						info->fps = user_freq;
+					}
+					else { 	// use default
+						info->resx = vo->resx;
+						info->resy = vo->resy;
+						info->fps = vo->pixclk;
+						match = 1;
+					}
+					break;
 				}
 			}
-			VPPMSG("[VOUT] probe %s, plug %d\n",vpp_vout_str[vout_priority[i]],plugin);
 		}
 		vpp_dac_sense_enable = sense_enable;
+		
+		if( match == 0 ){ // use default in no uboot parameter
+			info->resx = 1024;
+			info->resy = 768;
+			info->fps = 60;
+		}
+		
 		if ( g_vpp.govrh_preinit ){
+			if( vout_priority[i] == VOUT_SD_ANALOG ){
+				int_vout_mode = VOUT_SD_ANALOG;
+				dvo_vout_mode = VOUT_MODE_MAX;
+				hdmi_vout_mode = 0;
+			}
 			vout_set_mode(VOUT_BOOT,1);
 		}
 		else {
-			VPPMSG("[VOUT] vout valid 0x%x\n",vout_prio_valid);
-			if( vout_prio_valid ){
-				for(i=(sizeof(vout_priority));i>=0;i--){
-					if( vout_prio_valid & (0x1 << i) ){
-						DPRINT("[VOUT] set mode %s\n",vpp_vout_str[vout_priority[i]]);
-						vout_set_mode(vout_priority[i],1);
-					}
-				}
+			if( vout_priority[i] != VOUT_SD_ANALOG ){
+			    if( (dvo_vout_mode != VOUT_MODE_MAX) && (dvo_vout_mode !=vout_priority[i]) ) vout_set_mode(dvo_vout_mode,1);
+			    if( (int_vout_mode != VOUT_MODE_MAX) && (int_vout_mode !=vout_priority[i]) ) vout_set_mode(int_vout_mode,1);
+				if( hdmi_vout_mode ) vout_set_mode(VOUT_HDMI,1);
 			}
-			else {
-				vout_set_mode(VOUT_DVI,1);
-				vout_set_mode(VOUT_VGA,1);
-			}
+		    if( vout_priority[i] < VOUT_BOOT ) vout_set_mode(vout_priority[i],1);
         }
 	}
-	DPRINT("[VOUT] vo_init_wmt %dx%d@%d\n",info->resx,info->resy,info->fps);
+	info->pixclk = (info->fps>1000000)? info->fps:(info->resx*info->resy*info->fps);
+	printk("dvo %d,int %d,hdmi %d\n",dvo_vout_mode,int_vout_mode,hdmi_vout_mode);
+	printk(KERN_ALERT "vo_init_wmt (%s %dx%d,%d)\n",(vo)? vo->name:"NO",info->resx,info->resy,info->fps);
 	return 0;
 }
 

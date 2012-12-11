@@ -164,13 +164,14 @@ static void delay_timer_handler(unsigned long data)
 void wmt_i2s_dac0_ctrl(int HDMI_audio_enable)
 {
 	if (HDMI_audio_enable) {
+		/* for internal HDMI only */
 		/* disable ch0 and ch1, if HDMI Audio is enabled  */
-		ASMPFCHCFG_VAL = 0x43211;
+		ASMPFCHCFG_VAL = 0x44444;
 		info("HDMI Audio is enabled, disable dac0 of I2S");
 	}
 	else {
 		/* assign ch#0 and ch#1 to DAC#0 & SPDIF out */
-		ASMPFCHCFG_VAL = 0x43200;
+		ASMPFCHCFG_VAL = 0x32100;
 		info("HDMI Audio is disabled, enable dac0 of I2S");
 	}
 }
@@ -299,14 +300,14 @@ static unsigned char aud_smp_rate_convert(unsigned int smp_rate)
 	
 }
 
-static void i2s_sample_rate(unsigned int rate)
+static int i2s_sample_rate(unsigned int rate)
 {
 	unsigned char rate_index;
 
 	DBG_DETAIL("rate=%d", rate);
 
 	if (rate == i2s_data->i2s.rate)
-		return;
+		return 0;
 
 	i2s_data->i2s.rate = rate;
 	
@@ -315,12 +316,8 @@ static void i2s_sample_rate(unsigned int rate)
 	i2s_disable();
 	aud_audprf_setting(rate_index);
 
-#ifdef CONFIG_FB_WMT
-	/* pass information of audio to HDMI Audio */
-	hd_audio_flag = vpp_set_audio(16, rate, 2);
-#endif	
-
 	i2s_enable();
+	return 1;
 }
 
 static void i2s_init(int mode)
@@ -378,7 +375,7 @@ static void i2s_init(int mode)
 	ASMPFBS_TYPE_VAL = 0x05;
 
 	/* assign ch#0 and ch#1 to DAC#0 & SPDIF out */
-	ASMPFCHCFG_VAL = 0x43200;
+	ASMPFCHCFG_VAL = 0x32100;
 
 	/* 16 bits mode, enable AADCFIFO */
 	AADCFEN_VAL = (AADCF16_ENABLE | AADCF_ENABLE);
@@ -390,6 +387,7 @@ static void i2s_init(int mode)
 	ADCCFG_VAL = 0x901001;
 
 	i2s_data->i2s.rate = 44100;
+	i2s_data->i2s.channels = 2;
 
 #ifdef AUD_SPDIF_ENABLE
 	/* set ADGO channel status for 44.1K sample rate */
@@ -411,7 +409,7 @@ static void i2s_init(int mode)
 
 #ifdef CONFIG_FB_WMT	
 	/* pass information of audio to HDMI Audio */
-	hd_audio_flag = vpp_set_audio(16, i2s_data->i2s.rate, 2);
+	hd_audio_flag = vpp_set_audio(16, i2s_data->i2s.rate, i2s_data->i2s.channels);
 #endif
 	
 	if (!hd_audio_flag)
@@ -532,7 +530,8 @@ static int wmt_i2s_dai_hw_params(struct snd_pcm_substream *substream,
 static int wmt_i2s_prepare(struct snd_pcm_substream *substream, struct snd_soc_dai *dai)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	unsigned int channel, byte;
+	int stream_id = substream->pstr->stream;
+	int rate_ch_chg_flag = 0;
 
 #ifdef CONFIG_SND_OSSEMUL
 	//info("oss.rate=%d, oss.channels=%d", runtime->oss.rate, runtime->oss.channels);
@@ -540,21 +539,57 @@ static int wmt_i2s_prepare(struct snd_pcm_substream *substream, struct snd_soc_d
 	DBG_DETAIL();
 #endif
 
-	byte = (runtime->sample_bits)/8;
-	channel = runtime->channels;
-
-	DPRINTK("snd_wmt_alsa_prepare byte = %d, channels = %d", byte ,runtime->channels);
-
 #ifdef CONFIG_SND_OSSEMUL
 	if (runtime->oss.rate) {
-		i2s_sample_rate(runtime->oss.rate);
+		rate_ch_chg_flag = i2s_sample_rate(runtime->oss.rate);
 	}
 	else {
-		i2s_sample_rate(runtime->rate);
+		rate_ch_chg_flag = i2s_sample_rate(runtime->rate);
 	}
 #else
-	i2s_sample_rate(runtime->rate);
+		rate_ch_chg_flag = i2s_sample_rate(runtime->rate);
 #endif
+
+	//info("rate=%d, channels=%d", runtime->rate, runtime->channels);
+
+	if (i2s_data->i2s.channels != runtime->channels) {
+		i2s_data->i2s.channels = runtime->channels;
+		rate_ch_chg_flag = 1;
+
+		if (stream_id == SNDRV_PCM_STREAM_PLAYBACK) {
+			ASMPFCFG_VAL &= ~ASMPF_ENABLE;
+			
+			if ((runtime->channels) && (runtime->channels <= 2)) {
+				/* set to i2s in mode: 2ch input, 2ch output */
+				GPIO_PIN_SHARING_SEL_4BYTE_VAL &= ~(BIT0);
+				GPIO_PIN_SHARING_SEL_4BYTE_VAL |= (BIT2 | BIT3);
+				
+				ASMPFCFG_VAL = 0xB2;
+				info("config to 2ch output");
+			}
+			else if (runtime->channels > 2) {
+				/* set to i2s out mode: 8ch output */
+				GPIO_PIN_SHARING_SEL_4BYTE_VAL &= ~(BIT0 | BIT3);
+				GPIO_PIN_SHARING_SEL_4BYTE_VAL |= (BIT2);
+
+				ASMPFCFG_VAL = ((ASMPFCFG_VAL & 0xF0) | (runtime->channels));
+				info("config to %dch output, %x", runtime->channels, ASMPFCFG_VAL);
+			}
+						
+			ASMPFCFG_VAL |= ASMPF_ENABLE;
+		}
+		else if (stream_id == SNDRV_PCM_STREAM_CAPTURE) {
+			/* set to i2s in mode: 2ch input, 2ch output */
+			GPIO_PIN_SHARING_SEL_4BYTE_VAL &= ~(BIT0);
+			GPIO_PIN_SHARING_SEL_4BYTE_VAL |= (BIT2 | BIT3);
+		}
+	}
+
+#ifdef CONFIG_FB_WMT
+	/* pass information of audio to HDMI Audio */
+	if (rate_ch_chg_flag)
+		hd_audio_flag = vpp_set_audio(16, i2s_data->i2s.rate, i2s_data->i2s.channels);
+#endif	
 
 	/*
 	printk("avail_max=%d, rate=%d, channels=%d, period_size=%d, periods=%d, buffer_size=%d, tick_time=%d, \
@@ -672,7 +707,7 @@ struct snd_soc_dai wmt_i2s_dai = {
 	.resume = wmt_i2s_resume,
 	.playback = {
 		.channels_min = 1,
-		.channels_max = 2,
+		.channels_max = 6,
 		.rates = 0,
 		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_U8 | SNDRV_PCM_FMTBIT_FLOAT,
 	},

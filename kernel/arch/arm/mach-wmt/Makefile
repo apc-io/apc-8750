@@ -3,7 +3,7 @@
 #
 
 # Common support
-obj-y   := generic.o irq.o board.o wmt_clk.o dma.o memblock.o perf.o #time.o
+obj-y   := generic.o irq.o board.o wmt_clk.o dma.o perf.o #time.o
 obj-m   := 
 obj-n   :=
 obj-    :=

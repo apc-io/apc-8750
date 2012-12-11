@@ -353,6 +353,10 @@ int mv_loadBmp(unsigned char* fileBuffer)
     	printf("Error : Not BMP Format\r\n");
         return -1;
 	}
+// clear display buffer jakie 20120312
+	for(i=0;i<s_primary.height;i++) 
+	      for(j=0;j<s_primary.width;j++)
+		putcolor2fb(&s_primary, j, i, 0 );
 
 	header = (bmp_header_t *)fileBuffer;
 

@@ -107,6 +107,3 @@ obj-$(CONFIG_SND_SOC_WM_HUBS)	+= snd-soc-wm-hubs.o
 
 # Amp
 obj-$(CONFIG_SND_SOC_MAX9877)	+= snd-soc-max9877.o
-
-# echo cancellation
-obj-$(CONFIG_SND_SOC_FM34)	+= snd-soc-fm34.o

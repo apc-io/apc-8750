@@ -517,124 +517,6 @@ config TOUCHSCREEN_TSC2007
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called tsc2007.
-config TOUCHSCREEN_WMT
-        tristate "WonderMedia Touchscreen Input Driver Support"
-        depends on ARCH_WMT
-        help
-          Say Y here if you have an WMT based board with touchscreen
-          attached to it.
-
-          If unsure, say N.
-
-          To compile this driver as a module, choose M here: the
-          module will be called WMT_ts.
-choice
-    prompt "TS interface Select"
-        depends on TOUCHSCREEN_WMT 
-    default WMT_SPITS2_SUPPORT 
-config WMT_SPITS2_SUPPORT
-        bool "SPI2"
-        ---help---
-          Say Y here if you want to use SPI TS2.
-endchoice
-
-config TOUCHSCREEN_ROHM
-        tristate "ROHM Input Driver Support"
-        depends on ARCH_WMT && VT34XX_SPI_SUPPORT
-        help
-          Say Y here if you have an WMT based board with ROHM touchscreen
-          attached to it.
-
-          If unsure, say N.
-
-          To compile this driver as a module, choose M here: the
-          module will be called WMT_ts.
-choice
-    prompt "Type Select"
-        depends on TOUCHSCREEN_ROHM
-    default ROHM_BU21020_SUPPORT
-config ROHM_BU21020_SUPPORT
-        bool "BU21020"
-        ---help---
-          Say Y here if you want to use SPI TS2.
-endchoice
-config TOUCHSCREEN_UTK
-        tristate "UTK Input Driver Support"
-        depends on ARCH_WMT
-        help
-          Say Y here if you have an WMT based board with UTK touchscreen
-          attached to it.
-
-          If unsure, say N.
-
-          To compile this driver as a module, choose M here: the
-          module will be called WMT_ts.
-choice
-    prompt "Type Select"
-        depends on TOUCHSCREEN_UTK
-    default UTK_UOR6X5X_SUPPORT
-config UTK_UOR6X5X_SUPPORT
-        bool "UOR6X5X"
-        ---help---
-          Say Y here if you want to use UOR6X5X.
-endchoice
-
-config TOUCHSCREEN_MST
-        tristate "MST Input Driver Support"
-        depends on ARCH_WMT
-        help
-          Say Y here if you have an WMT based board with MST touchscreen
-          attached to it.
-
-          If unsure, say N.
-choice
-    prompt "Type Select"
-        depends on TOUCHSCREEN_MST
-    default MST_TANGOS32_SUPPORT
-config MST_TANGOS32_SUPPORT
-        bool "TANGOS32"
-        ---help---
-          Say Y here if you want to use TANGOS32.
-endchoice
-
-config TOUCHSCREEN_ILITEK
-        tristate "ILITEK Input Driver Support"
-        depends on ARCH_WMT
-        help
-          Say Y here if you have an WMT based board with ILITEK touchscreen
-          attached to it.
-
-          If unsure, say N.
-choice
-    prompt "Type Select"
-        depends on TOUCHSCREEN_ILITEK
-    default ILITEK__SUPPORT
-config ILITEK_SUPPORT
-        bool "ILITEK"
-        ---help---
-          Say Y here if you want to use ILITEK.
-endchoice
-
-config TOUCHSCREEN_WMT_AD7843
-        tristate "WMT AD7843-like Input Driver Support"
-        depends on ARCH_WMT && WMT_NEWSPI_SUPPORT
-        help
-          Say Y here if you have an WMT based board with WMT AD7843-like touchscreen
-          attached to it.
-
-          If unsure, say N.
-
-          To compile this driver as a module, choose M here: the
-          module will be called WMT_ts.
-choice
-	prompt "Type Select"
-	    depends on TOUCHSCREEN_WMT_AD7843
-	default CS7146_SUPPORT
-config CS7146_SUPPORT
-	bool "CS7146"
-	---help---
-	  Say Y here if you want to use SPI TS2.
-endchoice
 
 config TOUCHSCREEN_W90X900
 	tristate "W90P910 touchscreen driver"
@@ -644,8 +526,6 @@ config TOUCHSCREEN_W90X900
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called w90p910_ts.
-
-source "drivers/input/touchscreen/vt1603a_ts/Kconfig"
 
 config TOUCHSCREEN_PCAP
 	tristate "Motorola PCAP touchscreen"

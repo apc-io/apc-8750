@@ -308,6 +308,17 @@ void vpp_clr_framebuf(vpp_mod_t mod)
 			ysize = 4 * ysize;
 			csize = 0;
 			break;
+    	case VDO_COL_FMT_RGB_888:
+		case VDO_COL_FMT_RGB_666:
+			ysize = 3 * ysize;
+			csize = 0;
+			break;
+	    case VDO_COL_FMT_RGB_1555:
+	    case VDO_COL_FMT_RGB_5551:
+		case VDO_COL_FMT_RGB_565:
+			ysize = 2 * ysize;
+			csize = 0;
+			break;
 		case VDO_COL_FMT_YUV444:
 			csize = 2 * ysize;
 			break;
@@ -320,13 +331,15 @@ void vpp_clr_framebuf(vpp_mod_t mod)
 			break;
 	}
 
+#ifdef __KERNEL__
 	if( ysize ){
-		memset((char *)phys_to_virt(yaddr),0,ysize);
+		memset((char *)mb_phys_to_virt(yaddr),0,ysize);
 	}
 
 	if( csize ){
-		memset((char *)phys_to_virt(caddr),0x80,csize);
+		memset((char *)mb_phys_to_virt(caddr),0x80,csize);
 	}
+#endif
 //	DPRINT("[VPP] clr fb Y(0x%x,%d) C(0x%x,%d),%s\n",yaddr,ysize,caddr,csize,vpp_colfmt_str[colfmt]);
 }
 
@@ -1022,6 +1035,10 @@ void vpp_set_video_scale(vdo_view_t *vw)
 		goto set_video_scale_end;
 	}
 
+	if( g_vpp.vpp_path == VPP_VPATH_SCL ){
+		g_vpp.scl_fb_mb_clear = 0xFF;
+	}
+
 	if( vpp_check_dbg_level(VPP_DBGLVL_SCALE) ){
 		DPRINT("[V1] X src %d,vit %d,vis %d,pos %d,oft %d\n",vw->resx_src,vw->resx_virtual,vw->resx_visual,vw->posx,vw->offsetx);
 		DPRINT("[V1] Y src %d,vit %d,vis %d,pos %d,oft %d\n",vw->resy_src,vw->resy_virtual,vw->resy_visual,vw->posy,vw->offsety);
@@ -1083,16 +1100,23 @@ unsigned int vpp_get_video_mode_fps(vpp_timing_t *timing)
 }
 
 unsigned int vpp_vout_option;
-vpp_timing_t *vpp_get_video_mode(unsigned int resx,unsigned int resy,unsigned int fps_pixclk)
+vpp_timing_t *vpp_get_video_mode(unsigned int resx,unsigned int resy,unsigned int fps_pixclk,int *index)
 {
 	int is_fps;
 	int i,j;
 	vpp_timing_t *ptr;
 	unsigned int line_pixel;
-	int index;
+	int first_order = 1;
+
+	if( vpp_video_mode_table[*index].option & VPP_OPT_INTERLACE ){
+		if( vpp_video_mode_table[*index].option != vpp_video_mode_table[*index+1].option ){
+			*index=*index-1;
+			printk("1 index %d\n",*index);
+		}
+	}
 
 	is_fps = ( fps_pixclk >= 1000000 )? 0:1;
-	for(i=0,index=0;;i++){
+	for(i=*index;;i++){
 		ptr = (vpp_timing_t *) &vpp_video_mode_table[i];
 		if( ptr->pixel_clock == 0 ){
 			break;
@@ -1104,7 +1128,7 @@ vpp_timing_t *vpp_get_video_mode(unsigned int resx,unsigned int resy,unsigned in
 		
 		line_pixel = (ptr->option & VPP_OPT_INTERLACE)? (ptr->vpixel*2):ptr->vpixel;
 		if ((ptr->hpixel == resx) && (line_pixel == resy)) {
-			for(j=i,index=i;;j++){
+			for(j=i,*index=i;;j++){
 				ptr = (vpp_timing_t *) &vpp_video_mode_table[j];
 				if( ptr->pixel_clock == 0 ){
 					break;
@@ -1112,18 +1136,26 @@ vpp_timing_t *vpp_get_video_mode(unsigned int resx,unsigned int resy,unsigned in
 				if( ptr->hpixel != resx ){
 					break;
 				}
+				
+				line_pixel = (ptr->option & VPP_OPT_INTERLACE)? (ptr->vpixel*2):ptr->vpixel;
+				if( line_pixel != resy ){
+					break;
+				}
+				
 				if( is_fps ){
 					if( fps_pixclk == vpp_get_video_mode_fps(ptr) ){
-						index = j;
+						*index = j;
 						break;
 					}
 				}
 				else {
-					if( (fps_pixclk/1000) == (ptr->pixel_clock/1000) ){
-						index = j;
+					if( (fps_pixclk/10000) == (ptr->pixel_clock/10000) ){
+						if( first_order ) // keep first order for same pixclk
+							*index = j;
+						first_order = 0;
 					}
 					if( (fps_pixclk) == (ptr->pixel_clock) ){
-						index = j;
+						*index = j;
 						goto get_mode_end;
 					}
 				}
@@ -1133,23 +1165,24 @@ vpp_timing_t *vpp_get_video_mode(unsigned int resx,unsigned int resy,unsigned in
 		if( ptr->hpixel > resx ){
 			break;
 		}
-		index = i;
+		*index = i;
 		if( ptr->option & VPP_OPT_INTERLACE ){
 			i++;
 		}
 	}
-get_mode_end:	
-	ptr = (vpp_timing_t *) &vpp_video_mode_table[index];
-//	printk("[VPP] get video mode %dx%d@%d,index %d,0x%x\n",resx,resy,fps_pixclk,index,vpp_vout_option);	
+get_mode_end:
+	ptr = (vpp_timing_t *) &vpp_video_mode_table[*index];
+//	printk("[VPP] get video mode %dx%d@%d,index %d,0x%x\n",resx,resy,fps_pixclk,*index,vpp_vout_option);	
 	return ptr;	
 }
 
 vpp_timing_t *vpp_get_video_mode_ext(unsigned int resx,unsigned int resy,unsigned int fps_pixclk,unsigned int option)
 {
 	vpp_timing_t *time;
+	int index = 0;
 
 	vpp_vout_option = option;
-	time = vpp_get_video_mode(resx,resy,fps_pixclk);
+	time = vpp_get_video_mode(resx,resy,fps_pixclk,&index);
 	vpp_vout_option = 0;
 	return time;
 }
@@ -1157,8 +1190,9 @@ vpp_timing_t *vpp_get_video_mode_ext(unsigned int resx,unsigned int resy,unsigne
 void vpp_set_video_mode(unsigned int resx,unsigned int resy,unsigned int pixel_clock)
 {
 	vpp_timing_t *timing;
+	int index = 0;
 
-	timing = vpp_get_video_mode(resx,resy,pixel_clock);
+	timing = vpp_get_video_mode(resx,resy,pixel_clock,&index);
 	govrh_set_timing(timing);
 }
 
@@ -1325,7 +1359,7 @@ void vpp_set_vppm_int_enable(vpp_int_t int_bit,int enable)
 		int int_enable;
 
 		int_enable = enable;
-		if( vppif_reg32_read(GOVRH_CUR_ENABLE) )	// govrh hw cursor
+		if( p_cursor->enable ) // govrh hw cursor
 			int_enable = 1;
 
 		if( g_vpp.vpp_path )	// direct path
@@ -1630,7 +1664,7 @@ void vpp_init(vout_info_t *info)
 	auto_pll_divisor(DEV_ARF,CLK_ENABLE,0,0);
 	auto_pll_divisor(DEV_ARFP,CLK_ENABLE,0,0);
 	auto_pll_divisor(DEV_DMA,CLK_ENABLE,0,0);
-	auto_pll_divisor(DEV_HDCP,CLK_ENABLE,0,0);
+	auto_pll_divisor(DEV_HDCE,CLK_ENABLE,0,0);
 	auto_pll_divisor(DEV_NA12,CLK_ENABLE,0,0);
 	auto_pll_divisor(DEV_VPU,CLK_ENABLE,0,0);
 	auto_pll_divisor(DEV_VPP,CLK_ENABLE,0,0);
@@ -1712,7 +1746,7 @@ int vpp_config(vout_info_t *info)
 	}
 #endif
 
-	vout_find_video_mode(info);
+//	vout_find_video_mode(info);
 	DPRINT("vpp_config(%dx%d@%d)\n",info->resx,info->resy,info->fps);
 	vout_config((g_vpp.govrh_preinit)? VOUT_BOOT:VOUT_MODE_ALL,info);
 
@@ -1722,6 +1756,7 @@ int vpp_config(vout_info_t *info)
 		if( g_vpp.vpp_path == VPP_VPATH_GE ){
 			vpp_path_fb.fb_w = info->resx;
 			vpp_path_fb.fb_h = info->resy;
+			vpp_path_fb.col_fmt = govrh_get_color_format();
 		}
 		vpp_path_fb.img_w = info->resx;
 		vpp_path_fb.img_h = info->resy;
@@ -1732,9 +1767,11 @@ int vpp_config(vout_info_t *info)
 	if( g_vpp.alloc_framebuf ){
 		g_vpp.alloc_framebuf(info->resx,info->resy);
 #ifdef CONFIG_VPP_GOVW_FRAMEBUF
-		vpp_path_fb.fb_w = g_vpp.govr->fb_p->fb.fb_w;
-		vpp_path_fb.fb_h = g_vpp.govr->fb_p->fb.fb_h;
-#endif		
+		if( g_vpp.vpp_path != VPP_VPATH_GE ){
+			vpp_path_fb.fb_w = g_vpp.govr->fb_p->fb.fb_w;
+			vpp_path_fb.fb_h = g_vpp.govr->fb_p->fb.fb_h;
+		}
+#endif
 		vpp_clr_framebuf(VPP_MOD_GOVRS);
 		vpp_clr_framebuf(VPP_MOD_GOVW);
 	}

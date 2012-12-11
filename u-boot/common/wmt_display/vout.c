@@ -55,7 +55,7 @@ vout_dev_ops_t *vout_dev_list;
 void vout_change_status(vout_t *vo,int cmd,int arg,int ret)
 {
 
-	DBGMSG(KERN_ALERT "vout_change_status(%d,%d,%d)\n",cmd,arg,ret);
+//	DBGMSG(KERN_ALERT "vout_change_status(%d,0x%x,%d)\n",cmd,arg,ret);
 
 	switch( cmd ){
 		case VOCTL_INIT:
@@ -243,6 +243,85 @@ int vout_set_mode(vout_mode_t mode,int on)
 */ 
 int vout_config(vout_mode_t mode,vout_info_t *info)
 {
+	int i;
+	vout_t *vo;
+	int no = VOUT_MODE_MAX;
+	vpp_timing_t *p_timing;
+	int disp_flag = 0;
+
+	DBGMSG("%s(%dx%d@%d,%d,0x%x)\n",__FUNCTION__,info->resx,info->resy,info->fps,info->pixclk,info->option);
+
+	for(i=(mode == VOUT_MODE_MAX)?0:mode;i<=mode;i++){
+		if( i >= VOUT_MODE_MAX )
+			break;
+		
+		if( !(vo = vout_array[i]) )
+			continue;
+
+		DBGMSG("%s,active %d,plug %d\n",vpp_vout_str[i],(vo->status & VPP_VOUT_STS_ACTIVE)?1:0,(vo->status & VPP_VOUT_STS_PLUGIN)?1:0);
+
+		if( (vo->status & VPP_VOUT_STS_ACTIVE) == 0 ){
+			continue;
+		}
+
+		if( (i == VOUT_SD_ANALOG) || (i == VOUT_SD_DIGITAL) ){
+			p_disp->tvsys = vo_res_to_tvsys(info->resx,info->resy,(vo->vo_option & VOUT_OPT_INTERLACE)?1:0);
+			vo_tvsys_to_res(p_disp->tvsys,info);
+			disp_flag = 1;
+			no = i;
+			DBGMSG("tvsys %d(%dx%d,%d)\n",p_disp->tvsys,info->resx,info->resy,info->pixclk);
+			break;
+		}
+		
+		if( (i == VOUT_LCD) || (i == VOUT_LVDS) ){
+			no = i;
+			break;
+		}
+		
+		if( no == VOUT_MODE_MAX ){
+			no = i;		// get first vo
+		}
+		
+		if( vo->status & VPP_VOUT_STS_PLUGIN ){
+			no = i;
+			break;
+		}
+	}
+
+	if( (info->resx == 1280) && (info->resy == 720) ){
+		if( no == VOUT_VGA ){
+			if( (info->pixclk/1000) == 74250 ){
+				info->pixclk = 74500000;
+			}
+		}
+		else {
+			if( (info->pixclk/1000) == 74500 ){
+				info->pixclk = 74250060;
+			}
+		}
+	}
+
+	if( (p_timing = vout_find_video_mode(no,info)) == 0 ){
+		return -1;
+	}
+	if ( g_vpp.govrh_preinit == 0 ){
+		govrh_set_timing(p_timing);
+		if( disp_flag ){
+			disp_set_mode(p_disp->tvsys,p_disp->tvconn);
+		}
+	}
+	
+	info->resx = p_timing->hpixel;
+	info->resy = p_timing->vpixel;
+	info->pixclk = p_timing->pixel_clock;
+	no = p_timing->hpixel + p_timing->hsync + p_timing->hbp + p_timing->hfp;
+	i = p_timing->vpixel + p_timing->vsync + p_timing->vbp + p_timing->vfp;
+	if( p_timing->option & VPP_OPT_INTERLACE ){
+		info->resy *= 2;
+	}
+	info->fps = info->pixclk / (no * i);
+	info->option = p_timing->option;
+	DBGMSG("%s(%dx%d@%d,%d,0x%x)\n",__FUNCTION__,info->resx,info->resy,info->fps,info->pixclk,info->option);
 	return vout_control(mode,VOCTL_CONFIG,(int)info); 
 } /* End of vout_config */
 
@@ -469,46 +548,187 @@ vout_dev_ops_t *vout_get_device(vout_dev_ops_t *ops)
 *		
 * \retval  0-OK,1-fail
 */ 
-int	vout_find_video_mode(vout_info_t *info)
+vpp_timing_t *vout_find_video_mode(int no,vout_info_t *info)
 {
-	int flag = 1;
-	vpp_timing_t *time;
+	vout_t *vo;
+	char *edid = 0;
+	unsigned int vo_option;
+	vpp_timing_t *p_timing = 0;
+	unsigned int opt = 0;
+	int index = 0;
+	vpp_timing_t *edid_timing = 0;
 
-//	DPRINT("[VPP] find video mode(%dx%d@%d,%d)\n",info->resx,info->resy,info->fps,info->timing.pixel_clock);
+	if( (vo = vout_get_info(no)) == 0 )
+		return 0;
 
-	if( info->timing.pixel_clock == (info->resx * info->resy * info->fps) ){
-		flag = 0;
-		time = &info->timing;
+//	if( vo->num != VPP_VOUT_NUM_HDMI )	// wm3445 simulate dual display
+	{
+	extern vpp_timing_t vo_oem_tmr;
+	
+	if( vo_oem_tmr.pixel_clock ){
+		p_timing = &vo_oem_tmr;
+		DBGMSG("%d(fixed timer)\n",no);
+		goto find_video_mode;
+	}
 	}
 
-	if( flag ){
-		time = vpp_get_video_mode(info->resx,info->resy,info->timing.pixel_clock);
-		if( time ){
-			if( time->pixel_clock == info->timing.pixel_clock ){
-				info->fps = VPP_GET_OPT_FPS(time->option);
-				flag = 0;
+	if( p_lcd ){
+		p_timing = &p_lcd->timing;
+		DBGMSG("%d(LCD timer)\n",no);
+		goto find_video_mode;
+	}
+
+	vo_option = vo->vo_option;
+	DBGMSG("(%d,%dx%d@%d),%s\n",no,info->resx,info->resy,info->pixclk,(vo_option & VOUT_OPT_INTERLACE)?"i":"p");
+	if( vo->status & VPP_VOUT_STS_PLUGIN ){
+		if( (edid = vout_get_edid(no)) ){
+			if( edid_parse(edid) == 0 ){
+				edid = 0;
+			}
+			else {
+				opt = info->fps | ((vo_option & VOUT_OPT_INTERLACE)? EDID_TMR_INTERLACE:0);
+				if( edid_find_support(info->resx,info->resy,opt,&edid_timing) ){
+					if( edid_timing ){
+						p_timing = edid_timing;
+						DBGMSG("Use EDID detail timing\n");
+						goto find_video_mode;
+					}
+				}
 			}
 		}
 	}
 
-	if( flag ){
-		time = vpp_get_video_mode(info->resx,info->resy,info->fps);
-		if( time ){
-			info->fps = VPP_GET_OPT_FPS(time->option);
-			flag = 0;
+	do {
+		p_timing = vpp_get_video_mode(info->resx,info->resy,info->pixclk,&index);
+		DBGMSG("find(%dx%d@%d) -> %dx%d,index %d\n",info->resx,info->resy,info->pixclk,p_timing->hpixel,p_timing->vpixel,index);
+		info->resx = p_timing->hpixel;
+		info->resy = p_timing->vpixel;
+		if( p_timing->option & VPP_OPT_INTERLACE ){
+			info->resy *= 2;
 		}
-	}
+		info->fps = VPP_GET_OPT_FPS(p_timing->option);
+		opt = info->fps | ((vo_option & VOUT_OPT_INTERLACE)? EDID_TMR_INTERLACE:0);
+		if( edid == 0 )
+			break;
 
-	if( flag ){
-		DPRINT("[VPP] *W* not find video mode\n");
+		DBGMSG("find edid %dx%d@%d%s\n",info->resx,info->resy,info->fps,(opt & EDID_TMR_INTERLACE)?"i":"p");
+		if( edid_find_support(info->resx,info->resy,opt,&edid_timing) ){
+			break;
+		}
+
+		opt = info->fps | ((vo_option & VOUT_OPT_INTERLACE)? 0:EDID_TMR_INTERLACE);
+		DBGMSG("find edid %dx%d@%d%s\n",info->resx,info->resy,info->fps,(opt & EDID_TMR_INTERLACE)?"i":"p");
+		if( edid_find_support(info->resx,info->resy,opt,&edid_timing) ){
+			break;
+		}
+
+		if( (info->resx <= vpp_video_mode_table[0].hpixel) || (index <=1) ){
+			info->resx = vpp_video_mode_table[0].hpixel;
+			info->resy = vpp_video_mode_table[0].vpixel;
+			break;
+		}
+		
+		do {
+			index--;
+			p_timing = (vpp_timing_t *) &vpp_video_mode_table[index];
+			if( info->resx == p_timing->hpixel ){
+				int vpixel;
+
+				vpixel = p_timing->vpixel;
+				if( p_timing->option & VPP_OPT_INTERLACE ){
+					vpixel *= 2;
+					index--;
+				}
+				if( info->resy == vpixel ){
+					continue;
+				}
+			}
+			break;
+		} while(1);
+		info->resx = vpp_video_mode_table[index].hpixel;
+		info->resy = vpp_video_mode_table[index].vpixel;
+		if(vpp_video_mode_table[index].option & VPP_OPT_INTERLACE){
+			info->resy *= 2;
+		}
+	} while(1);
+
+	if( edid_timing ){
+		p_timing = edid_timing;
+		DBGMSG("Use EDID detail timing\n");
 	}
 	else {
-		info->timing = *time;
+		if( opt & EDID_TMR_INTERLACE )
+			vo_option |= VOUT_OPT_INTERLACE;
+		else 
+			vo_option &= ~VOUT_OPT_INTERLACE;
+		
+		p_timing = vpp_get_video_mode_ext(info->resx,info->resy,info->fps,vo_option);
 	}
-//	DPRINT("[VPP] find video mode(%dx%d@%d,%d)\n",info->resx,info->resy,info->fps,info->timing.pixel_clock);
-	return 0;
+find_video_mode:
+	DBGMSG("Leave (%dx%d@%d)\n",p_timing->hpixel,p_timing->vpixel,p_timing->pixel_clock);
+	return p_timing;
 } /* End of vout_find_video_mode */
 
+int vout_check_ratio_16_9(unsigned int resx,unsigned int resy)
+{
+	int val;
+
+	val = ( resx * 10 ) / resy;
+	val = (val >= 15)? 1:0;
+//	DPRINT("%s(%d,%d):%d\n",__FUNCTION__,resx,resy,val);
+	return val;
+}
+
+int vout_find_edid_support_mode(unsigned int *resx,unsigned int *resy,unsigned int *fps,int r_16_9)
+{
+#ifdef CONFIG_WMT_EDID
+	int i,cnt;
+	vpp_timing_t *p;
+	unsigned int w,h,f,option;
+
+	for(i=0,cnt=0;;i++){
+		if( vpp_video_mode_table[i].pixel_clock == 0 )
+			break;
+		cnt++;
+	}
+
+	// DPRINT("%s %d,%d,%d,%d\n",__FUNCTION__,*resx,*resy,*fps,r_16_9);
+
+	for(i=cnt-1;i>=0;i--){
+		p = (vpp_timing_t *) &vpp_video_mode_table[i];
+		h = p->vpixel;
+		if(p->option & VPP_OPT_INTERLACE){
+			h = h*2;
+			i--;
+		}
+		if( h > *resy ) continue;
+		
+		w = p->hpixel;
+		if( w > *resx ) continue;
+		
+		f = vpp_get_video_mode_fps(p);
+		if( f > *fps ) continue;
+
+		if( r_16_9 != vout_check_ratio_16_9(w,h) ){
+			continue;
+		}
+
+		option = f & EDID_TMR_FREQ;
+		option |= (p->option & VPP_OPT_INTERLACE)? EDID_TMR_INTERLACE:0;
+
+		// DPRINT("%s %d,%d,%d,i %d,r %d\n",__FUNCTION__,w,h,f,(p->option & VPP_OPT_INTERLACE)? 1:0,r_16_9);
+
+		if( edid_find_support( w, h, option, &p) ){
+			*resx = w;
+			*resy = h;
+			*fps = f;
+			// DPRINT("[VOUT] %s(%dx%d@%d)\n",__FUNCTION__,w,h,f);
+			return 1;
+		}
+	}
+#endif
+	return 0;
+}
 /*--------------------End of Function Body -----------------------------------*/
 #undef VOUT_C
 

@@ -77,11 +77,11 @@ static const struct snd_pcm_hardware wmt_pcm_hardware = {
 	.formats		= SNDRV_PCM_FMTBIT_S16_LE,
 	.rate_min		= 8000,
 	.rate_max		= 96000,
-	.period_bytes_min	= 4 * 1024,
-	.period_bytes_max	= 4 * 1024,
+	.period_bytes_min	= 6 * 1024,
+	.period_bytes_max	= 6 * 1024,
 	.periods_min		= 1,
-	.periods_max		= 16,
-	.buffer_bytes_max	= 64 * 1024,
+	.periods_max		= 32,
+	.buffer_bytes_max	= 1024 * 64 * 3,
 	.fifo_size		= 32,
 };
 
@@ -223,7 +223,7 @@ static void audio_process_dma(struct audio_stream_a *s)
 				}
 			}
 		
-			if ((runtime->channels == 2) && (runtime->format == SNDRV_PCM_FORMAT_S16_LE)) {
+			if (((runtime->channels == 2) || (runtime->channels == 6)) && (runtime->format == SNDRV_PCM_FORMAT_S16_LE)) {
 				if ((stream_id == SNDRV_PCM_STREAM_PLAYBACK) && (wfd_audbuf.enable)) {
 					wmt_pcm_wfd_update(runtime->dma_buffer_p->area + offset, dma_size);
 				}
@@ -581,8 +581,8 @@ static int wmt_pcm_preallocate_dma_buffer(struct snd_pcm *pcm,
 		dump_buf[0].area = dma_alloc_writecombine(pcm->card->dev, (4 * size),
 					   &(dump_buf[stream].addr), GFP_KERNEL);
 
-		/* allocate buffer for WFD support */
-		wfd_audbuf.bytes = size / 4;
+		/* allocate buffer for WFD support, limit to 64KB */
+		wfd_audbuf.bytes = size / 3;
 		wfd_audbuf.area = dma_alloc_writecombine(pcm->card->dev, wfd_audbuf.bytes,
 					   &wfd_audbuf.addr, GFP_KERNEL);
 		memset(wfd_audbuf.area, 0x0, wfd_audbuf.bytes);

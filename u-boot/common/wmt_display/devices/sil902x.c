@@ -527,7 +527,7 @@ sil902x_mode_t sil902x_get_vmode(vout_info_t *info)
 	sil902x_mode_t mode;
 	unsigned int pixclock;
 
-	pixclock = info->timing.pixel_clock;
+	pixclock = info->pixclk;
 	mode = VMODE_MAX;
 	switch( info->resx ){
 		case 640:
@@ -598,6 +598,7 @@ sil902x_mode_t sil902x_get_vmode(vout_info_t *info)
 				    case 74250050:
 				    	mode = VMODE_1080i50;
 						break;
+					default:
 					case 148500000:
 				    	mode = VMODE_1080p60;
 						break;

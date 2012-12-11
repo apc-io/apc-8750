@@ -62,5 +62,7 @@ int wmt_swi2c_write(
     int cnt
 );
 
+int wmt_swi2c_check(swi2c_handle_t *handle);
+
 #endif
 

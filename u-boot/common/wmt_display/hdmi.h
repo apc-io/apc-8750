@@ -207,6 +207,16 @@ typedef enum {
 #define HDMI_AUD_FREQ_176_4K		0x6
 #define HDMI_AUD_FREQ_192K			0x7
 
+// 3D_Structure
+#define HDMI_3D_STRUCTURE_FRAME_PACKING		0x0
+#define HDMI_3D_STRUCTURE_FIELD_ALTERNATIVE	0x1
+#define HDMI_3D_STRUCTURE_LINE_ALTERNATIVE	0x2
+#define HDMI_3D_STRUCTURE_SIDE_BY_SIDE_FULL	0x3
+#define HDMI_3D_STRUCTURE_L_DEPTH			0x4
+#define HDMI_3D_STRUCTURE_L_DEP_GRA_GDEP	0x5
+#define HDMI_3D_STRUCTURE_TOP_AND_BOTTOM	0x6
+#define HDMI_3D_STRUCTURE_SIZE_BY_SIZE_HALF	0x8
+
 /*-------------------- EXPORTED PRIVATE TYPES---------------------------------*/
 /* typedef  void  hdmi_xxx_t;  *//*Example*/
 typedef struct {
@@ -238,10 +248,14 @@ typedef struct {
 typedef struct {
 	void (*init)(void);
 	void (*enable)(int on);
+	int (*poll)(void);
+	void (*dump)(void);
+	int (*interrupt)(void);
+	void (*get_bksv)(unsigned int *bksv);
 } hdmi_cp_t;
 
 /*-------------------- EXPORTED PRIVATE VARIABLES -----------------------------*/
-#ifdef HDMI_C
+#ifdef VPP_C
 #define EXTERN
 
 const hdmi_vic_t hdmi_vic_info[HDMI_VIDEO_CODE_MAX] = {
@@ -288,6 +302,8 @@ EXTERN const hdmi_vic_t hdmi_vic_info[HDMI_VIDEO_CODE_MAX];
 #endif /* ifdef HDMI_C */
 
 EXTERN hdmi_cp_t *hdmi_cp;
+EXTERN int hdmi_ri_tm_cnt;
+EXTERN hdmi_info_t hdmi_info;
 
 /* EXTERN int      hdmi_xxx; *//*Example*/
 #undef EXTERN
@@ -304,6 +320,7 @@ void hdmi_audio_mute(vpp_flag_t enable);
 void hdmi_set_enable(vpp_flag_t enable);
 void hdmi_set_dvi_enable(vpp_flag_t enable);
 void hdmi_set_cp_enable(vpp_flag_t enable);
+int hdmi_poll_cp_status(void);
 int hdmi_check_cp_int(void);
 void hdmi_config(hdmi_info_t *info);
 int hdmi_DDC_read(char addr,int index,char *buf,int length);

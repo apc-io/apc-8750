@@ -459,3 +459,15 @@ int vpp_i2c_enhanced_ddc_read(unsigned int addr,unsigned int index,char *pdata,i
 #endif
 } /* End of vpp_i2c_enhanced_ddc_read */
 
+void DelayMS(int ms)
+{
+	mdelay(ms);
+}
+
+#ifdef __KERNEL__
+EXPORT_SYMBOL(vpp_i2c_write);
+EXPORT_SYMBOL(vpp_i2c_read);
+EXPORT_SYMBOL(vpp_i2c_enhanced_ddc_read);
+EXPORT_SYMBOL(DelayMS);
+#endif
+

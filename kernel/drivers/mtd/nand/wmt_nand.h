@@ -271,6 +271,7 @@ struct _NAND_PDMA_DESC_L{
 /* cfg_23 */
 #define READ_RESUME 0x100
 #define ECC_MODE 7
+#define DIS_BCH_ECC 8
 
 /* ECC BCH interrupt mask */
 #define eccBCH_inetrrupt_enable 0x101
